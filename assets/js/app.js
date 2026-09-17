@@ -52,7 +52,7 @@
     },
     sumber: {
       title: 'Inventaris Sumber Air', icon: '🌊',
-      filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Metode Pengukuran', 'Status', 'Tahun'],
+      filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Status', 'Tahun'],
       kpis: [
         { label: 'Total Sumber Air', icon: '🌊', c: '#38bdf8', fn: r => r.length },
         { label: 'Lebung / Reservoir', icon: '🏞️', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length },
@@ -72,7 +72,8 @@
         'Keterangan (Aktif Irigasi/Tidak)': v => /tidak|non/i.test(v) ? 'chip-red' : 'chip-green',
         'Keterangan Ukur': v => /belum/i.test(v) ? 'chip-amber' : 'chip-blue',
         'Jenis Sumber Air': v => /deep|sumur/i.test(v) ? 'chip-purple' : 'chip-blue',
-        'Status': v => /siap/i.test(v) ? 'chip-green' : /kosong/i.test(v) ? 'chip-amber' : 'chip-gray'
+        'Status': v => /siap/i.test(v) ? 'chip-green' : /kosong/i.test(v) ? 'chip-amber' : 'chip-gray',
+        'Kondisi Sumur': v => /baik/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-gray'
       },
       numCols: ['Luas Badan Air', 'Volume Real Ukur (Overflow Terbuka)', 'Volume Potensi Maksimal (Overflow Terbuka)']
     },
