@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Dashboard monitoring Field Support Irigasi PG 2 — unit terpasang, sumber air, mesin, dan irrigator.">
+<meta name="theme-color" content="#0f766e">
+<title>Dashboard Field Support Irigasi PG 2</title>
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="loader"><div style="text-align:center"><div class="spinner"></div><div style="color:var(--muted);font-size:14px">Menyinkronkan data dari Google Spreadsheet…</div></div></div>
+<div class="toast" id="toast"></div>
+
+<header>
+  <div class="brand">
+    <div class="logo">💧</div>
+    <div><h1>Field Support Irigasi PG 2</h1><p>Monitoring Unit Terpasang · Sumber Air · Mesin · Irrigator</p></div>
+  </div>
+  <div class="hdr-actions">
+    <span class="sync"><span class="dot" id="syncDot"></span><span id="syncInfo">Sinkron…</span></span>
+    <button class="btn btn-glass" id="themeBtn" onclick="toggleTheme()">🌙 <span class="t">Tema</span></button>
+    <button class="btn btn-glass" onclick="exportCSV()">⬇ <span class="t">Export CSV</span></button>
+    <button class="btn btn-primary" id="refreshBtn" onclick="loadData(true)">⟳ <span class="t">Refresh</span></button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tab active" data-tab="overview">📊 Overview</div>
+  <div class="tab" data-tab="detail">🚜 Detail Terpasang <span class="badge" id="badge-detail">0</span></div>
+  <div class="tab" data-tab="sumber">🌊 Sumber Air <span class="badge" id="badge-sumber">0</span></div>
+  <div class="tab" data-tab="mesin">⚙️ Mesin <span class="badge" id="badge-mesin">0</span></div>
+  <div class="tab" data-tab="irrigator">💦 Irrigator <span class="badge" id="badge-irrigator">0</span></div>
+</nav>
+
+<main>
+  <div class="panel">
+    <section class="view active" id="view-overview">
+      <div class="kpis" id="ov-kpis"></div>
+      <div class="charts">
+        <div class="card"><h3>Unit Terpasang per Wilayah</h3><div class="chart-box"><canvas id="ov-c1"></canvas></div></div>
+        <div class="card"><h3>Komposisi Jenis Engine</h3><div class="chart-box"><canvas id="ov-c2"></canvas></div></div>
+        <div class="card"><h3>Sumber Air per Jenis</h3><div class="chart-box"><canvas id="ov-c3"></canvas></div></div>
+        <div class="card"><h3>Status Irrigator</h3><div class="chart-box"><canvas id="ov-c4"></canvas></div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><h3>Ranking Wilayah — Unit Terpasang</h3><ul class="mini-list" id="ov-wil"></ul></div>
+        <div class="card"><h3>Ringkasan Kondisi Peralatan</h3><ul class="mini-list" id="ov-kondisi"></ul></div>
+      </div>
+    </section>
+    <section class="view" id="view-detail"></section>
+    <section class="view" id="view-sumber"></section>
+    <section class="view" id="view-mesin"></section>
+    <section class="view" id="view-irrigator"></section>
+  </div>
+  <footer>
+    Dashboard Field Support Irigasi PG 2 · Data: <a id="sheetLink" href="#" target="_blank" rel="noopener">Google Spreadsheet</a> ·
+    <a href="https://github.com/wahyudp76/Field-Support-PG2" target="_blank" rel="noopener">GitHub</a> · <span id="ftime"></span>
+  </footer>
+</main>
+
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <header><h3 id="modalTitle">Detail</h3><button class="btn btn-outline" onclick="closeModal()">✕</button></header>
+    <div class="body" id="modalBody"></div>
+  </div>
+</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
