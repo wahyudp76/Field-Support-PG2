@@ -52,12 +52,30 @@
     return m ? m[0] : s;
   }
 
+  /* ---------- fetch dengan timeout + retry ---------- */
+  async function fetchText(url, label, tries = 3) {
+    let lastErr;
+    for (let i = 0; i < tries; i++) {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+      try {
+        const res = await fetch(url, { cache: 'no-store', signal: ctl.signal });
+        clearTimeout(t);
+        if (res.status === 429 || res.status >= 500) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw Object.assign(new Error('HTTP ' + res.status + ' saat mengambil sheet "' + label + '"'), { fatal: true });
+        return await res.text();
+      } catch (e) {
+        clearTimeout(t); lastErr = e;
+        if (e.fatal) throw e;
+        if (i < tries - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+      }
+    }
+    throw new Error((lastErr && lastErr.name === 'AbortError' ? 'Timeout' : (lastErr && lastErr.message || 'Gagal')) + ' saat mengambil sheet "' + label + '"');
+  }
+
   /* ---------- Ambil satu sheet ---------- */
   async function fetchSheet(key) {
     const cfg = APP_CONFIG.sheets[key];
-    const res = await fetch(APP_CONFIG.csvUrl(cfg.name), { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' saat mengambil sheet "' + cfg.name + '"');
-    const text = await res.text();
+    const text = await fetchText(APP_CONFIG.csvUrl(cfg.name), cfg.name);
     if (text.trim().startsWith('<')) throw new Error('Spreadsheet belum dibagikan publik (Anyone with the link → Viewer)');
     const raw = parseCSV(text);
     if (!raw.length) return { key, name: cfg.name, headers: [], rows: [] };

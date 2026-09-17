@@ -141,3 +141,39 @@ footer a{color:var(--muted);text-decoration:underline}
   .hdr-actions .btn span.t{display:none}
 }
 @media print{header,.tabs,.filters,.pager,footer{display:none}.panel{border:none;box-shadow:none}}
+
+/* ---------- Multi-select (checklist) ---------- */
+.ms{position:relative}
+.ms-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left;transition:.2s}
+.ms-btn:hover{border-color:var(--muted)}
+.ms.open .ms-btn,.ms-btn:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(34,197,94,.18);outline:none}
+.ms.has .ms-btn{border-color:var(--primary);background:rgba(34,197,94,.08)}
+.ms-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms-caret{color:var(--muted);font-size:12px;transition:.2s}
+.ms.open .ms-caret{transform:rotate(180deg)}
+.ms-dd{display:none;position:absolute;left:0;top:calc(100% + 6px);min-width:100%;width:max-content;max-width:320px;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);z-index:40;overflow:hidden;animation:fade .15s ease}
+.ms.open .ms-dd{display:block}
+.ms-top{padding:8px}
+.ms-top input{padding:7px 10px;font-size:12.5px}
+.ms-acts{display:flex;gap:4px;padding:0 8px 6px;font-size:11.5px}
+.ms-acts a{cursor:pointer;color:var(--accent);padding:3px 7px;border-radius:6px;font-weight:600}
+.ms-acts a:hover{background:var(--panel2)}
+.ms-list{max-height:260px;overflow:auto;padding:4px;border-top:1px solid var(--border)}
+.ms-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;font-size:12.5px;cursor:pointer;user-select:none}
+.ms-item:hover{background:var(--panel2)}
+.ms-item.hide{display:none}
+.ms-item input{accent-color:var(--primary);width:15px;height:15px;flex:none;cursor:pointer}
+.ms-lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms-cnt{font-size:11px;color:var(--muted);background:var(--panel2);padding:1px 7px;border-radius:999px;font-variant-numeric:tabular-nums}
+.filters{overflow:visible}
+.fgroup{position:relative}
+
+/* ---------- Table tools / page size ---------- */
+.tbl-tools{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ps{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.ps select{width:auto;padding:5px 26px 5px 9px;font-size:12.5px}
+thead th.sorted{color:var(--primary)}
+.dash{color:var(--muted)}
+.kpi.link{cursor:pointer}
+.mini-list li.sub{background:transparent;border:none;padding:6px 0 0;font-size:12px;color:var(--muted)}
+.chart-box canvas{max-width:100%}
