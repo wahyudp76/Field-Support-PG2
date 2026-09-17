@@ -186,6 +186,8 @@
   function buildView(k) {
     const cfg = CONFIG[k], data = RAW[k], el = $('view-' + k);
     if (data.error) { el.innerHTML = `<div class="alert">⚠️ Sheet "<b>${esc(data.name)}</b>" gagal dimuat: ${esc(data.error)}</div>`; return; }
+    // hancurkan chart lama milik tab ini (canvas akan dibuat ulang)
+    Object.keys(charts).forEach(id => { if (id.startsWith(k + '-')) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; } });
     const filters = cfg.filters.filter(f => data.headers.includes(f));
     // buang nilai filter lama yang sudah tidak ada di data
     Object.keys(state[k].filters).forEach(f => { if (!filters.includes(f)) delete state[k].filters[f]; });
@@ -401,7 +403,8 @@
     const labels = entries.map(e => e[0]), data = entries.map(e => e[1]);
 
     // update in-place jika tipe sama (lebih ringan & animasi halus)
-    const ex = charts[id];
+    let ex = charts[id];
+    if (ex && (ex.canvas !== ctx || !ctx.isConnected)) { try { ex.destroy(); } catch (e) {} delete charts[id]; ex = null; }
     if (ex && ex._t === type) {
       ex.data.labels = labels; ex.data.datasets[0].data = data;
       if (isPie) ex.data.datasets[0].backgroundColor = colors;
