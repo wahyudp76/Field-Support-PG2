@@ -17,6 +17,13 @@ Dashboard web interaktif untuk memonitor operasional irigasi PG 2. Data dibaca *
 
 Setiap tab: filter dropdown per kolom kunci, pencarian global, sort klik header, pagination, klik baris → detail lengkap, export CSV (hasil filter), tema gelap/terang, auto-refresh 5 menit, badge & chip berwarna.
 
+## PWA (Installable)
+
+Dashboard dapat dipasang sebagai aplikasi di Android / iOS / desktop:
+- **Android/Chrome:** tombol **📲 Install** di header, atau menu ⋮ → *Install app*.
+- **iOS/Safari:** Share → *Add to Home Screen*.
+- Bekerja offline dengan data terakhir yang berhasil dimuat.
+
 ## Struktur File
 
 ```
@@ -27,7 +34,10 @@ Field-Support-PG2/
 │   ├── js/config.js           # ⚙️ Konfigurasi: ID spreadsheet, nama sheet, batas kolom
 │   ├── js/data.js             # Ambil & parsing CSV dari Google Sheets, normalisasi data
 │   ├── js/app.js              # Logika dashboard: KPI, filter, grafik, tabel, export
-│   └── img/favicon.svg
+│   ├── img/og-cover.png        # gambar preview saat link dibagikan
+│   └── icons/                  # ikon PWA 72–512 px (any + maskable), apple-touch, favicon
+├── manifest.webmanifest        # Web App Manifest (installable PWA)
+├── sw.js                       # Service worker: app shell offline + cache data terakhir
 ├── .github/workflows/pages.yml# Auto-deploy ke GitHub Pages saat push ke main
 ├── .nojekyll
 └── README.md

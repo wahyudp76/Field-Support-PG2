@@ -524,6 +524,12 @@
   if (typeof Chart === 'undefined') toast('Library grafik (Chart.js) tidak termuat — grafik disembunyikan', true);
   else Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
 
+  /* ---------- PWA install prompt ---------- */
+  let deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; const b = $('installBtn'); if (b) b.style.display = ''; });
+  $('installBtn')?.addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('installBtn').style.display = 'none'; });
+  window.addEventListener('appinstalled', () => { toast('Aplikasi berhasil dipasang ✔'); const b = $('installBtn'); if (b) b.style.display = 'none'; });
+
   const h0 = location.hash.replace('#', '');
   loadData(false).then(() => switchTab(h0 || 'overview'));
 })();

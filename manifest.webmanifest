@@ -1,0 +1,33 @@
+{
+  "name": "Field Support Irigasi PG 2",
+  "short_name": "FS Irigasi PG2",
+  "description": "Dashboard monitoring irigasi PG 2: unit terpasang, sumber air, mesin, dan irrigator.",
+  "id": "/Field-Support-PG2/",
+  "start_url": "/Field-Support-PG2/",
+  "scope": "/Field-Support-PG2/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#0f766e",
+  "lang": "id",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "assets/icons/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Detail Terpasang", "url": "/Field-Support-PG2/#detail",    "icons": [{ "src": "assets/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Sumber Air",       "url": "/Field-Support-PG2/#sumber",    "icons": [{ "src": "assets/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Mesin",            "url": "/Field-Support-PG2/#mesin",     "icons": [{ "src": "assets/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Irrigator",        "url": "/Field-Support-PG2/#irrigator", "icons": [{ "src": "assets/icons/icon-96.png", "sizes": "96x96" }] }
+  ]
+}

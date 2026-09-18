@@ -6,7 +6,23 @@
 <meta name="description" content="Dashboard monitoring Field Support Irigasi PG 2 — unit terpasang, sumber air, mesin, dan irrigator.">
 <meta name="theme-color" content="#0f766e">
 <title>Dashboard Field Support Irigasi PG 2</title>
-<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="shortcut icon" href="assets/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FS Irigasi PG2">
+<meta name="application-name" content="FS Irigasi PG2">
+<meta name="msapplication-TileColor" content="#0f766e">
+<meta name="msapplication-TileImage" content="assets/icons/icon-144.png">
+<meta property="og:title" content="Dashboard Field Support Irigasi PG 2">
+<meta property="og:description" content="Monitoring unit terpasang, sumber air, mesin, dan irrigator PG 2.">
+<meta property="og:image" content="https://wahyudp76.github.io/Field-Support-PG2/assets/img/og-cover.png">
+<meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css?v=6">
@@ -24,6 +40,7 @@
   </div>
   <div class="hdr-actions">
     <span class="sync"><span class="dot" id="syncDot"></span><span id="syncInfo">Sinkron…</span></span>
+    <button class="btn btn-glass" id="installBtn" style="display:none" title="Pasang sebagai aplikasi">📲 <span class="t">Install</span></button>
     <button class="btn btn-glass" id="themeBtn" onclick="toggleTheme()">🌙 <span class="t">Tema</span></button>
     <button class="btn btn-glass" onclick="exportCSV()">⬇ <span class="t">Export CSV</span></button>
     <button class="btn btn-primary" id="refreshBtn" onclick="loadData(true)">⟳ <span class="t">Refresh</span></button>
@@ -74,5 +91,10 @@
 <script src="assets/js/config.js?v=6"></script>
 <script src="assets/js/data.js?v=6"></script>
 <script src="assets/js/app.js?v=6"></script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
 </body>
 </html>
