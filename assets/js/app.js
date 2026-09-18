@@ -79,22 +79,29 @@
     },
     mesin: {
       title: 'Inventaris Mesin / Engine', icon: '⚙️',
-      filters: ['Divisi', 'Spec', 'Pump', 'Jenis', 'Category', 'Prodo', 'Kondisi'],
+      filters: ['Asal Mesin', 'Komoditi', 'Jenis', 'Spec', 'Pompa', 'HP', 'Category', 'Status', 'Kondisi'],
       kpis: [
         { label: 'Total Mesin', icon: '⚙️', c: '#f59e0b', fn: r => r.length },
-        { label: 'Divisi', icon: '🏭', c: '#38bdf8', fn: r => uniq(r, 'Divisi').length },
-        { label: 'Tipe Spec', icon: '🔧', c: '#a78bfa', fn: r => uniq(r, 'Spec').length },
+        { label: 'Asal Mesin', icon: '🏭', c: '#38bdf8', fn: r => uniq(r, 'Asal Mesin').length },
+        { label: 'Komoditi / Wilayah', icon: '📍', c: '#a78bfa', fn: r => uniq(r, 'Komoditi').length },
         { label: 'Kondisi A — Baik', icon: '🟢', c: '#22c55e', fn: r => r.filter(x => x['Kondisi'] === 'A').length },
         { label: 'Kondisi B — Perhatian', icon: '🟡', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi'] === 'B').length },
         { label: 'Kondisi C — Perbaikan', icon: '🔴', c: '#ef4444', fn: r => r.filter(x => x['Kondisi'] === 'C').length },
       ],
       charts: [
-        { id: 'c1', title: 'Mesin per Divisi', type: 'bar', key: 'Divisi' },
-        { id: 'c2', title: 'Spec Engine', type: 'doughnut', key: 'Spec' },
+        { id: 'c1', title: 'Mesin per Komoditi', type: 'bar', key: 'Komoditi' },
+        { id: 'c2', title: 'Asal Mesin', type: 'doughnut', key: 'Asal Mesin' },
         { id: 'c3', title: 'Kondisi Keseluruhan', type: 'doughnut', key: 'Kondisi', colors: { A: '#22c55e', B: '#f59e0b', C: '#ef4444' } },
         { id: 'c4', title: 'Komponen Paling Sering Bermasalah', type: 'hbar', custom: 'components' },
       ],
-      chips: { 'Kondisi': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red', 'Komponen Bermasalah': () => 'chip-red' }
+      chips: {
+        'Kondisi': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
+        'Category': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
+        'Status': v => /terpasang|siap|aktif/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-gray',
+        'Pompa': v => /sumur/i.test(v) ? 'chip-blue' : 'chip-purple',
+        'Jenis': () => 'chip-gray',
+        'Komponen Bermasalah': () => 'chip-red'
+      }
     },
     irrigator: {
       title: 'Inventaris Irrigator', icon: '💦',
@@ -324,7 +331,7 @@
 
     requestAnimationFrame(() => cfg.charts.forEach(c => {
       if (c.custom === 'components') { drawChart(k + '-' + c.id, 'hbar', componentStats(k, rows), 10); return; }
-      if (!headers.includes(c.key)) return;
+      if (!headers.includes(c.key)) { const alt = altKey(headers, c.key); if (!alt) { noChart(k + '-' + c.id, c.key); return; } c.key = alt; }
       let e = count(rows, c.key).filter(x => x[0] !== '(kosong)');
       if (c.type === 'line') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
       else if (c.type === 'bar') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'id', { numeric: true }));
@@ -350,6 +357,17 @@
     $(k + '-pg').innerHTML = pg;
   }
 
+  // cari nama kolom alternatif (case-insensitive / sinonim) jika header sheet berubah
+  const SYN = { 'Divisi': ['Asal Mesin'], 'Asal Mesin': ['Divisi'], 'Komoditi': ['Wil', 'Wilayah', 'WILAYAH'], 'Wil': ['Wilayah', 'WILAYAH', 'Komoditi'] };
+  function altKey(headers, key) {
+    const low = headers.find(h => h.toLowerCase() === String(key).toLowerCase()); if (low) return low;
+    return (SYN[key] || []).find(a => headers.includes(a)) || null;
+  }
+  function noChart(id, key) {
+    const c = $(id); if (!c) return;
+    if (charts[id]) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; }
+    const box = c.parentElement; box.innerHTML = `<div class="empty" style="padding:70px 10px 0;font-size:12.5px">Kolom "<b>${esc(key)}</b>" tidak ditemukan di sheet</div>`;
+  }
   function componentCols(k) {
     if (compCache[k]) return compCache[k];
     const skip = new Set((APP_CONFIG.nonComponentCols[k] || []).map(s => s.toLowerCase()).concat(['kondisi', 'komponen bermasalah']));

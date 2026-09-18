@@ -20,13 +20,13 @@ window.APP_CONFIG = {
   sheets: {
     detail:    { name: 'Detail Terpasang', endHeader: 'Kode Air' },
     sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
-    mesin:     { name: 'Mesin',            endHeader: 'Pompa'    },
+    mesin:     { name: 'Mesin',            endHeader: null       }, // berhenti di header kosong pertama
     irrigator: { name: 'Irrigator',        endHeader: 'Status'   }
   },
 
   // Kolom non-komponen (dipakai untuk menghitung kondisi A/B/C keseluruhan unit)
   nonComponentCols: {
-    mesin:     ['No', 'Kode Unit', 'Spec', 'Pump', 'Divisi', 'Mesin', 'Prodo', 'Category', 'Jenis', 'HP', 'Pompa'],
+    mesin:     ['No', 'Kode Unit', 'Spec', 'Pump', 'Divisi', 'Asal Mesin', 'Mesin', 'Prodo', 'Category', 'Jenis', 'HP', 'Pompa', 'Status', 'Komoditi'],
     irrigator: ['NO', 'KODE UNIT', 'WILAYAH', 'Category', 'Unit', 'Nozzle', 'Status']
   }
 };
