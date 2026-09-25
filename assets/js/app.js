@@ -28,6 +28,7 @@
   const CONFIG = {
     detail: {
       title: 'Detail Unit Terpasang', icon: '🚜',
+      freezeUntil: 'Wil',
       filters: ['Wil', 'Bengkel', 'Jenis Engine', 'Sumber Air', 'Siram', 'Power', 'Tanggal'],
       kpis: [
         { label: 'Total Unit', icon: '🚜', c: '#22c55e', fn: r => r.length },
@@ -52,6 +53,7 @@
     },
     sumber: {
       title: 'Inventaris Sumber Air', icon: '🌊',
+      freezeUntil: 'Wilayah',
       filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Status', 'Tahun'],
       kpis: [
         { label: 'Total Sumber Air', icon: '🌊', c: '#38bdf8', fn: r => r.length },
@@ -79,6 +81,7 @@
     },
     mesin: {
       title: 'Inventaris Mesin / Engine', icon: '⚙️',
+      freezeUntil: 'Asal Mesin',   // kolom paling kiri s.d. kolom ini dibekukan saat scroll horizontal
       filters: ['Asal Mesin', 'Komoditi', 'Jenis', 'Spec', 'Pompa', 'HP', 'Category', 'Status', 'Kondisi'],
       kpis: [
         { label: 'Total Mesin', icon: '⚙️', c: '#f59e0b', fn: r => r.length },
@@ -105,6 +108,7 @@
     },
     irrigator: {
       title: 'Inventaris Irrigator', icon: '💦',
+      freezeUntil: 'WILAYAH',
       filters: ['WILAYAH', 'Unit', 'Category', 'Status', 'Nozzle', 'Kondisi'],
       kpis: [
         { label: 'Total Irrigator', icon: '💦', c: '#38bdf8', fn: r => r.length },
@@ -213,6 +217,7 @@
         <h3>${cfg.icon} ${esc(cfg.title)}</h3>
         <div class="tbl-tools">
           <span class="info" id="${k}-info"></span>
+          <label class="ps switch" title="Bekukan kolom kiri s.d. ${esc(cfg.freezeUntil || '')}"><input type="checkbox" id="${k}-freeze" ${cfg.freezeUntil ? 'checked' : 'disabled'}> 🧊 Freeze kolom</label>
           <label class="ps">Tampilkan <select id="${k}-size">${PAGE_SIZES.map(s => `<option value="${s}">${s}</option>`).join('')}</select> baris</label>
         </div>
       </div>
@@ -232,6 +237,9 @@
     $(k + '-tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-i]'); if (tr) showDetail(k, +tr.dataset.i); });
     $(k + '-pg').addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) { state[k].page = +b.dataset.p; renderView(k); el.querySelector('.tbl-wrap').scrollTop = 0; } });
     $(k + '-af').addEventListener('click', e => { const c = e.target.closest('[data-f]'); if (!c) return; const f = c.dataset.f, v = c.dataset.v; if (v !== undefined) state[k].filters[f].delete(v); else delete state[k].filters[f]; if (state[k].filters[f] && !state[k].filters[f].size) delete state[k].filters[f]; state[k].page = 1; syncMsButtons(k); renderView(k); });
+    const fz = $(k + '-freeze');
+    if (localStorage.getItem('fs_freeze_' + k) === '0') fz.checked = false;
+    fz.addEventListener('change', () => { localStorage.setItem('fs_freeze_' + k, fz.checked ? '1' : '0'); applyFreeze(k); });
     const sizeSel = $(k + '-size');
     sizeSel.value = String(state[k].size === Infinity ? 'Semua' : state[k].size);
     if (sizeSel.selectedIndex < 0) sizeSel.value = '25';
@@ -343,9 +351,10 @@
     const pages = Math.max(1, Math.ceil(rows.length / size)); if (s.page > pages) s.page = pages;
     const start = (s.page - 1) * size, slice = rows.slice(start, start + size);
     $(k + '-info').textContent = `${fmt(rows.length)} dari ${fmt(RAW[k].rows.length)} baris` + (rows.length ? ` · menampilkan ${fmt(start + 1)}–${fmt(start + slice.length)}` : '');
-    $(k + '-thead').innerHTML = '<tr>' + headers.map(h => `<th data-h="${esc(h)}" class="${s.sort === h ? 'sorted' : ''}">${esc(h)}<span class="arrow">${s.sort === h ? (s.dir > 0 ? '▲' : '▼') : '⇅'}</span></th>`).join('') + '</tr>';
+    const nFreeze = freezeCount(k);
+    $(k + '-thead').innerHTML = '<tr>' + headers.map((h, i) => `<th data-h="${esc(h)}" class="${s.sort === h ? 'sorted ' : ''}${i < nFreeze ? 'fz' : ''}${i === nFreeze - 1 ? ' fz-last' : ''}">${esc(h)}<span class="arrow">${s.sort === h ? (s.dir > 0 ? '▲' : '▼') : '⇅'}</span></th>`).join('') + '</tr>';
     const cells = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) { const r = slice[i]; let t = `<tr class="clickable" data-i="${r._i}">`; for (const h of headers) t += `<td>${cell(k, h, r[h])}</td>`; cells[i] = t + '</tr>'; }
+    for (let i = 0; i < slice.length; i++) { const r = slice[i]; let t = `<tr class="clickable" data-i="${r._i}">`; for (let j = 0; j < headers.length; j++) { const h = headers[j]; t += j < nFreeze ? `<td class="fz${j === nFreeze - 1 ? ' fz-last' : ''}">${cell(k, h, r[h])}</td>` : `<td>${cell(k, h, r[h])}</td>`; } cells[i] = t + '</tr>'; }
     $(k + '-tbody').innerHTML = cells.length ? cells.join('') : `<tr><td colspan="${headers.length}" class="empty">Tidak ada data yang cocok dengan filter</td></tr>`;
     $(k + '-pinfo').textContent = `Halaman ${s.page} / ${pages}`;
     let pg = ''; const btn = (p, l, cur) => `<button class="btn btn-outline ${cur ? 'cur' : ''}" data-p="${p}">${l}</button>`;
@@ -355,7 +364,31 @@
       if (s.page < pages) pg += btn(s.page + 1, '›') + btn(pages, '»');
     }
     $(k + '-pg').innerHTML = pg;
+    requestAnimationFrame(() => applyFreeze(k));
   }
+
+  /* ---------- kolom beku (sticky kiri) ---------- */
+  function freezeCount(k) {
+    const cfg = CONFIG[k], fz = $(k + '-freeze');
+    if (!cfg.freezeUntil || (fz && !fz.checked)) return 0;
+    const idx = RAW[k].headers.findIndex(h => h.toLowerCase() === cfg.freezeUntil.toLowerCase());
+    return idx < 0 ? 0 : idx + 1;
+  }
+  function applyFreeze(k) {
+    const wrap = document.querySelector(`#view-${k} .tbl-wrap`); if (!wrap) return;
+    const n = freezeCount(k), ths = wrap.querySelectorAll('thead th');
+    wrap.classList.toggle('frozen', n > 0);
+    if (!n) { wrap.querySelectorAll('.fz').forEach(el => { el.classList.remove('fz', 'fz-last'); el.style.left = ''; }); return; }
+    // hitung offset kiri kumulatif dari lebar header
+    const lefts = []; let acc = 0;
+    for (let i = 0; i < n; i++) { lefts.push(acc); acc += ths[i] ? ths[i].getBoundingClientRect().width : 0; }
+    wrap.querySelectorAll('tr').forEach(tr => {
+      const cells = tr.children;
+      for (let i = 0; i < n && i < cells.length; i++) { cells[i].classList.add('fz'); cells[i].classList.toggle('fz-last', i === n - 1); cells[i].style.left = lefts[i] + 'px'; }
+    });
+    wrap.style.setProperty('--fz-w', acc + 'px');
+  }
+  let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (currentTab !== 'overview') applyFreeze(currentTab); }, 150); });
 
   // cari nama kolom alternatif (case-insensitive / sinonim) jika header sheet berubah
   const SYN = { 'Divisi': ['Asal Mesin'], 'Asal Mesin': ['Divisi'], 'Komoditi': ['Wil', 'Wilayah', 'WILAYAH'], 'Wil': ['Wilayah', 'WILAYAH', 'Komoditi'] };

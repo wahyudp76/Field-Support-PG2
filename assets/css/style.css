@@ -177,3 +177,16 @@ thead th.sorted{color:var(--primary)}
 .kpi.link{cursor:pointer}
 .mini-list li.sub{background:transparent;border:none;padding:6px 0 0;font-size:12px;color:var(--muted)}
 .chart-box canvas{max-width:100%}
+
+/* ---------- Kolom beku (sticky kiri) ---------- */
+.tbl-wrap{position:relative}
+.tbl-wrap.frozen th.fz,.tbl-wrap.frozen td.fz{position:sticky;z-index:3;background:var(--panel)}
+.tbl-wrap.frozen thead th.fz{z-index:5;background:var(--panel2)}
+.tbl-wrap.frozen tbody tr:nth-child(even) td.fz{background:color-mix(in srgb,var(--panel) 96%,var(--muted))}
+.tbl-wrap.frozen tbody tr:hover td.fz{background:color-mix(in srgb,var(--panel) 90%,var(--primary))}
+.tbl-wrap.frozen .fz-last{box-shadow:inset -1px 0 0 var(--border),4px 0 10px -4px rgba(0,0,0,.45)}
+[data-theme="light"] .tbl-wrap.frozen .fz-last{box-shadow:inset -1px 0 0 var(--border),4px 0 10px -4px rgba(15,23,42,.18)}
+.tbl-wrap.frozen td.fz{max-width:none}
+.ps.switch{cursor:pointer;user-select:none}
+.ps.switch input{accent-color:var(--primary);width:15px;height:15px;cursor:pointer;margin:0}
+.ps.switch input:disabled{opacity:.4}

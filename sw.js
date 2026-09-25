@@ -1,6 +1,6 @@
 /* Service Worker — Field Support Irigasi PG 2
  * Strategi: app shell = cache-first (update di latar), data Google Sheets = network-first dengan fallback cache (offline). */
-const VERSION = 'fs-pg2-v1';
+const VERSION = 'fs-pg2-v2';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './assets/css/style.css', './assets/js/config.js', './assets/js/data.js', './assets/js/app.js',
