@@ -2,7 +2,7 @@
  * - File aplikasi (HTML/CSS/JS): network-first → selalu versi terbaru, fallback cache saat offline
  * - Ikon & library CDN: cache-first (jarang berubah)
  * - Data Google Sheets: network-first, simpan salinan terakhir untuk mode offline */
-const VERSION = 'fs-pg2-v3';
+const VERSION = 'fs-pg2-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './assets/css/style.css', './assets/js/config.js', './assets/js/data.js', './assets/js/app.js',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js'];
 

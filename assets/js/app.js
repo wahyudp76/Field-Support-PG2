@@ -184,6 +184,7 @@
       buildView(k);
       dirty[k] = true;
     });
+    updateIssues();
     renderOverview();
     if (currentTab !== 'overview') renderView(currentTab);
     const t = d.generatedAt, allKept = kept.length === Object.keys(CONFIG).length;
@@ -305,7 +306,7 @@
   function syncMsButtons(k) { document.querySelectorAll(`#view-${k} .ms`).forEach(ms => syncMsButton(k, ms)); }
   function closeAllDropdowns() { document.querySelectorAll('.ms.open').forEach(m => m.classList.remove('open')); }
   document.addEventListener('click', closeAllDropdowns);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAllDropdowns(); closeModal(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAllDropdowns(); closeModal(); if (window.closeIssues) closeIssues(); } });
 
   /* ---------- filter / sort ---------- */
   function filtered(k, skipField) {
@@ -364,7 +365,7 @@
     const nFreeze = freezeCount(k);
     $(k + '-thead').innerHTML = '<tr>' + headers.map((h, i) => `<th data-h="${esc(h)}" class="${s.sort === h ? 'sorted ' : ''}${i < nFreeze ? 'fz' : ''}${i === nFreeze - 1 ? ' fz-last' : ''}">${esc(h)}<span class="arrow">${s.sort === h ? (s.dir > 0 ? '▲' : '▼') : '⇅'}</span></th>`).join('') + '</tr>';
     const cells = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) { const r = slice[i]; let t = `<tr class="clickable" data-i="${r._i}">`; for (let j = 0; j < headers.length; j++) { const h = headers[j]; t += j < nFreeze ? `<td class="fz${j === nFreeze - 1 ? ' fz-last' : ''}">${cell(k, h, r[h])}</td>` : `<td>${cell(k, h, r[h])}</td>`; } cells[i] = t + '</tr>'; }
+    for (let i = 0; i < slice.length; i++) { const r = slice[i]; let t = `<tr class="clickable" data-i="${r._i}">`; for (let j = 0; j < headers.length; j++) { const h = headers[j]; const fl = r._flag && r._flag[h] && r._flag[h].level !== 'info' ? r._flag[h] : null; const cls = (j < nFreeze ? 'fz' + (j === nFreeze - 1 ? ' fz-last' : '') : '') + (fl ? ' bad' + (fl.level === 'error' ? ' err' : '') : ''); t += cls ? `<td class="${cls}"${fl ? ` title="${esc(fl.reason)} — ${esc(fl.suggest)}"` : ''}>${cell(k, h, r[h], r)}</td>` : `<td>${cell(k, h, r[h])}</td>`; } cells[i] = t + '</tr>'; }
     $(k + '-tbody').innerHTML = cells.length ? cells.join('') : `<tr><td colspan="${headers.length}" class="empty">Tidak ada data yang cocok dengan filter</td></tr>`;
     $(k + '-pinfo').textContent = `Halaman ${s.page} / ${pages}`;
     let pg = ''; const btn = (p, l, cur) => `<button class="btn btn-outline ${cur ? 'cur' : ''}" data-p="${p}">${l}</button>`;
@@ -421,8 +422,9 @@
     return e.length ? e : [['Semua komponen kondisi A', 0]];
   }
 
-  function cell(k, h, v) {
+  function cell(k, h, v, r) {
     if (v === '' || v == null) return '<span class="dash">—</span>';
+    if (r && r._flag && r._flag[h]) return `<span class="bad-v" title="${esc(r._flag[h].reason)} — ${esc(r._flag[h].suggest)}">${esc(v)}</span>`;
     const cfg = CONFIG[k];
     if (cfg.numCols && cfg.numCols.includes(h)) { const n = toNumber(v); if (!isNaN(n)) return `<span class="num">${fmt(n, 2)}</span>`; }
     if (h === 'Komponen Bermasalah') return `<span class="chip chip-red" title="${esc(v)}">${esc(v.length > 60 ? v.slice(0, 57) + '…' : v)}</span>`;
@@ -436,7 +438,7 @@
     const r = RAW[k].rows.find(x => x._i === i); if (!r) return;
     const title = r['Kode Unit'] || r['KODE UNIT'] || r['Kode Engine'] || r['Kode Baru'] || CONFIG[k].title;
     $('modalTitle').textContent = CONFIG[k].icon + ' ' + title;
-    $('modalBody').innerHTML = RAW[k].headers.map(h => `<div class="kv"><b>${esc(h)}</b>${cell(k, h, r[h])}</div>`).join('');
+    $('modalBody').innerHTML = RAW[k].headers.map(h => { const fl = r._flag && r._flag[h]; return `<div class="kv" ${fl ? 'style="outline:1px solid #f59e0b"' : ''}><b>${esc(h)}${fl ? ' ⚠️' : ''}</b>${cell(k, h, r[h], r)}${fl ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">${esc(fl.reason)}<br>${esc(fl.suggest)}</div>` : ''}</div>`; }).join('');
     $('modal').classList.add('show');
   }
   window.closeModal = () => $('modal').classList.remove('show');
@@ -544,6 +546,55 @@
     $('ov-kondisi').innerHTML = li('⚙️ Mesin', m) + li('💦 Irrigator', ir);
   }
   $('ov-kpis').addEventListener('click', e => { const c = e.target.closest('[data-t]'); if (c) switchTab(c.dataset.t); });
+
+  /* ---------- Peringatan kualitas data ---------- */
+  let ISSUES = [], lastIssueSig = '';
+  function updateIssues() {
+    ISSUES = [];
+    Object.keys(CONFIG).forEach(k => { (RAW[k].issues || []).forEach(x => ISSUES.push({ ...x, key: k })); });
+    const order = { error: 0, warn: 1, info: 2 };
+    ISSUES.sort((a, b) => order[a.level] - order[b.level] || a.sheet.localeCompare(b.sheet) || a.row - b.row);
+    const important = ISSUES.filter(x => x.level !== 'info');
+    const btn = $('issuesBtn');
+    btn.style.display = ISSUES.length ? '' : 'none';
+    $('issuesCount').textContent = important.length || ISSUES.length;
+    btn.classList.toggle('btn-warn', important.length > 0); btn.classList.toggle('btn-glass', important.length === 0);
+    btn.innerHTML = important.length ? `⚠️ <span id="issuesCount">${important.length}</span> <span class="t">peringatan data</span>` : `ℹ️ <span id="issuesCount">${ISSUES.length}</span> <span class="t">info data</span>`;
+    const sel = $('iss-sheet'); const cur = sel.value;
+    sel.innerHTML = '<option value="">Semua sheet</option>' + [...new Set(ISSUES.map(x => x.sheet))].map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''); sel.value = cur;
+    // notifikasi bila ada temuan baru dibanding sync sebelumnya
+    const sig = important.map(x => x.sheet + x.row + x.col + x.value).join('|');
+    if (important.length && sig !== lastIssueSig) {
+      const nErr = important.filter(x => x.level === 'error').length;
+      setTimeout(() => toast(`⚠️ ${important.length} nilai di spreadsheet tidak sesuai format${nErr ? ` (${nErr} error)` : ''} — klik tombol "peringatan data" untuk detail`, true), 1200);
+    }
+    lastIssueSig = sig;
+    if ($('issuesModal').classList.contains('show')) renderIssues();
+  }
+  function renderIssues() {
+    const lv = { error: $('iss-err').checked, warn: $('iss-warn').checked, info: $('iss-info').checked }, sh = $('iss-sheet').value;
+    const list = ISSUES.filter(x => lv[x.level] && (!sh || x.sheet === sh));
+    const chip = l => l === 'error' ? '<span class="chip chip-red">Error</span>' : l === 'warn' ? '<span class="chip chip-amber">Peringatan</span>' : '<span class="chip chip-gray">Info</span>';
+    $('issuesBody').innerHTML = list.length ? list.slice(0, 500).map(x => `<tr class="clickable" data-key="${x.key}" data-row="${x.row}"><td>${chip(x.level)}</td><td>${esc(x.sheet)}</td><td><b>${x.row}</b></td><td>${esc(x.id)}</td><td>${esc(x.col)}</td><td class="v">${esc(x.value)}</td><td>${esc(x.reason)}</td><td class="s">${esc(x.suggest)}</td></tr>`).join('') + (list.length > 500 ? `<tr><td colspan="8" class="empty">… ${list.length - 500} lainnya (export CSV untuk lengkap)</td></tr>` : '')
+      : '<tr><td colspan="8" class="empty">✅ Tidak ada temuan untuk filter ini</td></tr>';
+  }
+  window.openIssues = () => { $('issuesModal').classList.add('show'); renderIssues(); };
+  window.closeIssues = () => $('issuesModal').classList.remove('show');
+  window.exportIssues = () => {
+    const h = ['Level', 'Sheet', 'Baris', 'Kode', 'Kolom', 'Nilai Terinput', 'Masalah', 'Saran'];
+    const csv = [h.join(','), ...ISSUES.map(x => [x.level, x.sheet, x.row, x.id, x.col, x.value, x.reason, x.suggest].map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })); a.download = `peringatan_data_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  $('issuesBtn').addEventListener('click', openIssues);
+  $('issuesModal').addEventListener('click', e => { if (e.target.id === 'issuesModal') closeIssues(); });
+  ['iss-err', 'iss-warn', 'iss-info', 'iss-sheet'].forEach(id => $(id).addEventListener('change', renderIssues));
+  // klik baris temuan → buka tab terkait, cari kode-nya, tampilkan detail
+  $('issuesBody').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-key]'); if (!tr) return;
+    const k = tr.dataset.key, i = +tr.dataset.row - 2; closeIssues(); switchTab(k);
+    const r = RAW[k].rows[i]; if (!r) return;
+    const idc = RAW[k].meta.idCol; resetFilters(k); $(k + '-search').value = r[idc] || ''; state[k].search = r[idc] || ''; renderView(k); showDetail(k, r._i);
+  });
 
   /* ---------- export ---------- */
   window.exportCSV = function () {

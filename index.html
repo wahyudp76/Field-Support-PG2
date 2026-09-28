@@ -26,7 +26,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="assets/css/style.css?v=8">
+<link rel="stylesheet" href="assets/css/style.css?v=9">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
 </head>
 <body>
@@ -41,6 +41,7 @@
   </div>
   <div class="hdr-actions">
     <span class="sync"><span class="dot" id="syncDot"></span><span id="syncInfo">Sinkron…</span></span>
+    <button class="btn btn-warn" id="issuesBtn" style="display:none" title="Peringatan kualitas data">⚠️ <span id="issuesCount">0</span> <span class="t">peringatan data</span></button>
     <button class="btn btn-glass" id="installBtn" style="display:none" title="Pasang sebagai aplikasi">📲 <span class="t">Install</span></button>
     <button class="btn btn-glass" id="themeBtn" onclick="toggleTheme()">🌙 <span class="t">Tema</span></button>
     <button class="btn btn-glass" onclick="exportCSV()">⬇ <span class="t">Export CSV</span></button>
@@ -82,6 +83,23 @@
   </footer>
 </main>
 
+<div class="modal-bg" id="issuesModal">
+  <div class="modal modal-wide">
+    <header><h3>⚠️ Pemeriksaan Kualitas Data Spreadsheet</h3><div style="display:flex;gap:8px"><button class="btn btn-outline" onclick="exportIssues()">⬇ CSV</button><button class="btn btn-outline" onclick="closeIssues()">✕</button></div></header>
+    <div class="issues-intro">
+      Nilai berikut terdeteksi <b>tidak sesuai format kolomnya</b> saat sinkronisasi. Dashboard tetap menampilkan angka dengan tafsiran terbaik, tetapi <b>perbaiki di spreadsheet</b> agar data konsisten.
+      Aturan: <span class="chip chip-blue">ribuan = titik</span> <span class="chip chip-blue">desimal = koma</span> contoh <code>130.317,78</code> · tanggal <code>dd/mm/yyyy</code>. Nilai <b>teks</b> dan <b>ekstrem</b> tidak diikutkan dalam total/KPI sampai diperbaiki.
+    </div>
+    <div class="issues-tools">
+      <label class="ps switch"><input type="checkbox" id="iss-err" checked> <span class="chip chip-red">Error</span></label>
+      <label class="ps switch"><input type="checkbox" id="iss-warn" checked> <span class="chip chip-amber">Peringatan</span></label>
+      <label class="ps switch"><input type="checkbox" id="iss-info"> <span class="chip chip-gray">Info</span></label>
+      <select id="iss-sheet" style="width:auto;margin-left:auto"><option value="">Semua sheet</option></select>
+    </div>
+    <div class="tbl-wrap" style="max-height:52vh;border-radius:0 0 var(--radius) var(--radius);border:none"><table><thead><tr><th>Level</th><th>Sheet</th><th>Baris</th><th>Kode</th><th>Kolom</th><th>Nilai Terinput</th><th>Masalah</th><th>Saran Perbaikan</th></tr></thead><tbody id="issuesBody"></tbody></table></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="modal">
   <div class="modal">
     <header><h3 id="modalTitle">Detail</h3><button class="btn btn-outline" onclick="closeModal()">✕</button></header>
@@ -89,9 +107,9 @@
   </div>
 </div>
 
-<script src="assets/js/config.js?v=8" defer></script>
-<script src="assets/js/data.js?v=8" defer></script>
-<script src="assets/js/app.js?v=8" defer></script>
+<script src="assets/js/config.js?v=9" defer></script>
+<script src="assets/js/data.js?v=9" defer></script>
+<script src="assets/js/app.js?v=9" defer></script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

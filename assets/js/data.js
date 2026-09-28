@@ -58,21 +58,54 @@
     for (const v of values) { const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/\d{4}$/); if (!m) continue; if (+m[1] > 12) dmy++; else if (+m[2] > 12) mdy++; }
     return dmy > mdy ? 'dmy' : (mdy > 0 ? 'mdy' : 'auto');
   }
-  // Format angka satu kolom: 'id' (1.234,56) bila ada koma desimal / pola ribuan-titik, selain itu 'en' (1234.56)
-  function detectNumFormat(values) {
-    let id = 0, en = 0, any = 0;
-    for (const v of values) {
-      const t = String(v).trim(); if (!t) continue; any++;
-      if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) || /^-?\d+,\d+$/.test(t)) id++;
-      else if (/^-?\d+(\.\d+)?$/.test(t)) en++;
-      else return null; // ada teks → bukan kolom numerik
-    }
-    return any ? (id > 0 ? 'id' : 'en') : null;
+  /* Klasifikasi satu nilai angka:
+   *  'int'  → 1234            (netral)
+   *  'id'   → 1.234,56 / 12,5 (koma desimal, titik ribuan)
+   *  'en'   → 1234.56         (titik desimal)
+   *  'amb'  → 1.234           (ambigu: ribuan-titik ATAU desimal 3 digit)
+   *  'mixed'→ 1,234.56 / 1.234.56 / 1,2,3 (format campur/tidak valid)
+   *  'text' → bukan angka */
+  function classifyNum(t) {
+    if (/^-?\d+$/.test(t)) return 'int';
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) return 'amb';
+    if (/^-?\d{1,3}(\.\d{3})+,\d+$/.test(t) || /^-?\d+,\d+$/.test(t)) return 'id';
+    if (/^-?\d+\.\d+$/.test(t)) return 'en';
+    if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) return 'en-thousand';
+    if (/^-?[\d.,]+$/.test(t)) return 'mixed';
+    return 'text';
   }
+  // Format dominan satu kolom. Kolom dianggap numerik bila ≥ 80% nilai terisi berupa angka.
+  function detectNumFormat(values) {
+    const c = { int: 0, id: 0, en: 0, amb: 0, 'en-thousand': 0, mixed: 0, text: 0 }; let any = 0;
+    for (const v of values) { const t = String(v).trim(); if (!t) continue; any++; c[classifyNum(t)]++; }
+    if (!any) return null;
+    const numeric = any - c.text - c.mixed;
+    if (numeric / any < 0.8 || numeric < 1) return null;
+    if (c.id === 0 && c.en === 0 && c['en-thousand'] === 0 && c.amb === 0) return 'int';
+    const idScore = c.id + c.amb, enScore = c.en + c['en-thousand'];
+    return idScore >= enScore ? 'id' : 'en';
+  }
+  // Parse mengikuti format kolom; nilai yang menyimpang tetap di-parse sesuai maksud penulisnya
+  // (mis. "130317.78" di kolom id → 130317.78) supaya angka dashboard tetap benar, lalu dilaporkan.
   function parseNum(v, fmt) {
     const t = String(v).trim(); if (!t) return NaN;
-    if (fmt === 'id') return Number(t.replace(/\./g, '').replace(',', '.'));
-    return Number(t);
+    const k = classifyNum(t);
+    if (k === 'int') return Number(t);
+    if (k === 'id') return Number(t.replace(/\./g, '').replace(',', '.'));
+    if (k === 'en') return Number(t);
+    if (k === 'en-thousand') return Number(t.replace(/,/g, ''));
+    if (k === 'amb') return fmt === 'en' ? Number(t) : Number(t.replace(/\./g, ''));
+    return NaN;
+  }
+  // Periksa satu nilai terhadap format kolom → { level, reason, suggest } atau null
+  function checkNum(t, fmt) {
+    const k = classifyNum(t);
+    if (k === 'text') return fmt === 'int' ? { level: 'info', reason: 'Teks di kolom angka', suggest: 'Kosongkan atau isi angka' } : { level: 'error', reason: 'Bukan angka (teks) di kolom angka', suggest: 'Isi angka saja, contoh 1.234,56' };
+    if (k === 'mixed') return { level: 'error', reason: 'Format angka tidak valid (titik/koma campur)', suggest: 'Gunakan titik untuk ribuan dan koma untuk desimal, contoh 130.317,78' };
+    if (fmt === 'id' && k === 'en') return { level: 'warn', reason: 'Pemisah desimal memakai TITIK, kolom ini memakai KOMA', suggest: 'Ganti menjadi ' + Number(t).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) };
+    if (fmt === 'id' && k === 'en-thousand') return { level: 'warn', reason: 'Pemisah ribuan memakai KOMA, kolom ini memakai TITIK', suggest: 'Ganti menjadi ' + Number(t.replace(/,/g, '')).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) };
+    if (fmt === 'en' && (k === 'id' || k === 'en-thousand')) return { level: 'warn', reason: 'Pemisah desimal memakai KOMA, kolom ini memakai TITIK', suggest: 'Ganti menjadi ' + parseNum(t, fmt) };
+    return null;
   }
 
   /* ---------- fetch dengan timeout + retry ---------- */
@@ -129,16 +162,39 @@
       }
     });
 
+    const issues = [];
+    const idCol = headers.find(h => /^(kode unit|kode baru|kode engine|kode|no)$/i.test(h)) || headers[1] || headers[0];
     const rows = body.map((r, i) => {
-      const o = { _i: i, _num: {} };
+      const o = { _i: i, _num: {}, _flag: null };
       headers.forEach((h, j) => {
         let v = r[j] == null ? '' : String(r[j]).trim();
-        if (dateOrder[h] && v) v = toISODate(v, dateOrder[h]);
+        if (dateOrder[h] && v) {
+          const iso = toISODate(v, dateOrder[h]);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) issues.push({ row: i + 2, col: h, value: v, level: 'warn', reason: 'Tanggal tidak dikenali (format kolom ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') + ')', suggest: 'Tulis ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') });
+          v = iso;
+        }
         o[h] = v;
-        if (numFmt[h] && v) o._num[h] = parseNum(v, numFmt[h]);
+        if (numFmt[h] && v) {
+          const chk = checkNum(v, numFmt[h]);
+          o._num[h] = parseNum(v, numFmt[h]);
+          if (chk) { issues.push({ row: i + 2, col: h, value: v, ...chk }); (o._flag || (o._flag = {}))[h] = chk; }
+        }
       });
       return o;
     });
+    // Nilai ekstrem: > 50× median kolom (hanya kolom desimal, ≥ 20 data) → kemungkinan salah pemisah (130.317,78 ditulis 130317,78 ×1000 dst.)
+    Object.keys(numFmt).forEach(h => {
+      if (numFmt[h] === 'int' || /koordinat|tahun|no/i.test(h)) return;
+      const vals = rows.map(r => r._num[h]).filter(n => !isNaN(n) && n > 0).sort((a, b) => a - b);
+      if (vals.length < 20) return;
+      const med = vals[Math.floor(vals.length / 2)], p95 = vals[Math.floor(vals.length * 0.95)];
+      rows.forEach(r => {
+        const n = r._num[h]; if (isNaN(n) || (r._flag && r._flag[h])) return;
+        if (n > Math.max(med * 50, p95 * 10)) { const chk = { level: 'warn', reason: 'Nilai ekstrem (' + Math.round(n / med) + '× median kolom) — kemungkinan salah pemisah ribuan/desimal; TIDAK dihitung dalam total', suggest: 'Periksa: mungkin seharusnya ' + (n / 1000).toLocaleString('id-ID', { maximumFractionDigits: 2 }) }; issues.push({ row: r._i + 2, col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; r._num[h] = NaN; }
+        else if (n < 0) { const chk = { level: 'warn', reason: 'Nilai negatif', suggest: 'Periksa tanda minus' }; issues.push({ row: r._i + 2, col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; }
+      });
+    });
+    issues.forEach(x => { x.id = rows[x.row - 2][idCol] || ''; x.sheet = cfg.name; });
 
     // Kondisi keseluruhan (A/B/C) untuk sheet komponen
     if (compCols.length) {
@@ -155,7 +211,7 @@
       if (!headers.includes('Kondisi')) headers.push('Kondisi');
       if (!headers.includes('Komponen Bermasalah')) headers.push('Komponen Bermasalah');
     }
-    return { key, name: cfg.name, headers, rows, meta: { dateOrder, numFmt, compCols, fetchedAt: Date.now() } };
+    return { key, name: cfg.name, headers, rows, issues, meta: { dateOrder, numFmt, compCols, idCol, fetchedAt: Date.now() } };
   }
 
   /* ---------- Ambil semua sheet paralel ---------- */
@@ -172,5 +228,5 @@
     return out;
   }
 
-  global.DataLayer = { fetchAll, fetchSheet, parseCSV, toNumber, toISODate, detectDateOrder, detectNumFormat };
+  global.DataLayer = { fetchAll, fetchSheet, parseCSV, toNumber, toISODate, detectDateOrder, detectNumFormat, classifyNum, checkNum, parseNum };
 })(window);

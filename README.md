@@ -60,6 +60,21 @@ Pembacaan kolom berhenti pada header kosong pertama atau kolom terakhir yang dit
 2. **Source:** pilih **GitHub Actions**.
 3. Tunggu workflow *Deploy GitHub Pages* selesai (tab **Actions**), lalu buka https://wahyudp76.github.io/Field-Support-PG2/
 
+## Pemeriksaan kualitas data (validasi otomatis saat sync)
+
+Setiap sinkronisasi, semua kolom angka & tanggal diperiksa. Bila ada nilai yang menyimpang, tombol **⚠️ N peringatan data** muncul di header, toast pemberitahuan tampil, dan sel terkait disorot kuning/merah di tabel (arahkan kursor untuk melihat alasannya).
+
+| Deteksi | Contoh | Level |
+|---|---|---|
+| Pemisah desimal memakai titik di kolom berformat koma | `130317.78` → saran `130.317,78` | Peringatan |
+| Pemisah ribuan memakai koma | `1,234.56` → saran `1.234,56` | Peringatan |
+| Format campur / tidak valid | `1.234.56` | Error |
+| Teks di kolom angka | `abc` | Error |
+| Nilai ekstrem (> 50× median kolom) — indikasi salah pemisah | `104.183.210,00` → saran `104.183,21` | Peringatan |
+| Tanggal tidak valid untuk format kolom | `31/13/2024` | Peringatan |
+
+Panel peringatan menampilkan **sheet, nomor baris, kode, kolom, nilai terinput, masalah, dan saran perbaikan**; klik baris untuk melompat ke datanya; bisa diekspor CSV. Nilai **teks** dan **ekstrem** tidak diikutkan dalam total/KPI sampai diperbaiki di spreadsheet; nilai salah pemisah tetap dihitung sesuai maksud penulisnya.
+
 ## Ketahanan terhadap perubahan sheet
 
 - **Kolom komponen A/B/C dideteksi otomatis** (kolom yang seluruh isinya A/B/C) → menambah/menghapus kolom komponen di sheet Mesin/Irrigator tidak perlu ubah kode.
