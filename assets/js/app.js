@@ -16,7 +16,10 @@
   const cssId = s => String(s).replace(/[^a-z0-9]/gi, '_');
   const uniq = (rows, k) => [...new Set(rows.map(r => r[k]).filter(v => v !== '' && v != null))];
   const sortNat = arr => arr.sort((a, b) => String(a).localeCompare(String(b), 'id', { numeric: true }));
-  const sum = (rows, k) => rows.reduce((a, r) => { const n = toNumber(r[k]); return a + (isNaN(n) ? 0 : n); }, 0);
+  const numv = (r, k) => { const n = r._num && r._num[k]; return n !== undefined ? n : toNumber(r[k]); };
+  const sum = (rows, k) => { let a = 0; for (const r of rows) { const n = numv(r, k); if (!isNaN(n)) a += n; } return a; };
+  // ambil nilai kolom, coba sinonim bila kolom tidak ada
+  const val = (r, ...names) => { for (const n of names) if (r[n] !== undefined) return r[n]; return ''; };
   const fmt = (n, d = 0) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n || 0);
   const count = (rows, k) => { const m = new Map(); for (const r of rows) { const v = r[k] || '(kosong)'; m.set(v, (m.get(v) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1]); };
   const isTrue = (v, re) => re.test(String(v || ''));
@@ -29,14 +32,15 @@
     detail: {
       title: 'Detail Unit Terpasang', icon: '🚜',
       freezeUntil: 'Wil',
-      filters: ['Wil', 'Bengkel', 'Jenis Engine', 'Sumber Air', 'Siram', 'Power', 'Tanggal'],
+      filters: ['Wil', 'Bengkel', 'Jenis Engine', 'Sumber Air', 'Terpasang', 'Power', 'Tanggal'],
       kpis: [
         { label: 'Total Unit', icon: '🚜', c: '#22c55e', fn: r => r.length },
-        { label: 'Terpasang', icon: '✅', c: '#38bdf8', fn: r => r.filter(x => isTrue(x['Siram'], /terpasang/i) || isTrue(x['Keterangan'], /terpasang/i)).length },
+        { label: 'Terpasang', icon: '✅', c: '#38bdf8', fn: r => r.filter(x => isTrue(val(x, 'Terpasang', 'Siram'), /terpasang/i)).length },
+        { label: 'Rusak', icon: '🛠️', c: '#ef4444', fn: r => r.filter(x => isTrue(val(x, 'Terpasang', 'Siram'), /rusak/i)).length },
         { label: 'Wilayah', icon: '📍', c: '#a78bfa', fn: r => uniq(r, 'Wil').length },
         { label: 'Engine Unik', icon: '⚙️', c: '#f59e0b', fn: r => uniq(r, 'Kode Engine').length },
         { label: 'Irigator Unik', icon: '💦', c: '#ec4899', fn: r => uniq(r, 'Kode Irigator').length },
-        { label: 'Ada Catatan', icon: '📝', c: '#ef4444', fn: r => r.filter(x => x['Keterangan']).length },
+        { label: 'Ada Catatan', icon: '📝', c: '#f97316', fn: r => r.filter(x => x['Keterangan']).length },
       ],
       charts: [
         { id: 'c1', title: 'Unit per Wilayah', type: 'bar', key: 'Wil' },
@@ -45,7 +49,8 @@
         { id: 'c4', title: 'Pemasangan per Tanggal', type: 'line', key: 'Tanggal' },
       ],
       chips: {
-        'Siram': v => /terpasang/i.test(v) ? 'chip-green' : 'chip-amber',
+        'Siram': v => /terpasang/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
+        'Terpasang': v => /terpasang/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
         'Sumber Air': v => /deep|sumur/i.test(v) ? 'chip-blue' : 'chip-purple',
         'Jenis Engine': () => 'chip-gray',
         'Keterangan': () => 'chip-red'
@@ -75,21 +80,22 @@
         'Keterangan Ukur': v => /belum/i.test(v) ? 'chip-amber' : 'chip-blue',
         'Jenis Sumber Air': v => /deep|sumur/i.test(v) ? 'chip-purple' : 'chip-blue',
         'Status': v => /siap/i.test(v) ? 'chip-green' : /kosong/i.test(v) ? 'chip-amber' : 'chip-gray',
-        'Kondisi Sumur': v => /baik/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-gray'
+        'Kondisi Sumur': v => /baik/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : /perbaikan/i.test(v) ? 'chip-amber' : 'chip-gray'
       },
       numCols: ['Luas Badan Air', 'Volume Real Ukur (Overflow Terbuka)', 'Volume Potensi Maksimal (Overflow Terbuka)']
     },
     mesin: {
       title: 'Inventaris Mesin / Engine', icon: '⚙️',
       freezeUntil: 'Asal Mesin',   // kolom paling kiri s.d. kolom ini dibekukan saat scroll horizontal
-      filters: ['Asal Mesin', 'Komoditi', 'Jenis', 'Spec', 'Pompa', 'HP', 'Category', 'Status', 'Kondisi'],
+      filters: ['Asal Mesin', 'Komoditi', 'Jenis', 'Spec', 'Pompa', 'Power', 'Category', 'Status', 'Kondisi'],
       kpis: [
         { label: 'Total Mesin', icon: '⚙️', c: '#f59e0b', fn: r => r.length },
         { label: 'Asal Mesin', icon: '🏭', c: '#38bdf8', fn: r => uniq(r, 'Asal Mesin').length },
-        { label: 'Komoditi / Wilayah', icon: '📍', c: '#a78bfa', fn: r => uniq(r, 'Komoditi').length },
-        { label: 'Kondisi A — Baik', icon: '🟢', c: '#22c55e', fn: r => r.filter(x => x['Kondisi'] === 'A').length },
-        { label: 'Kondisi B — Perhatian', icon: '🟡', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi'] === 'B').length },
-        { label: 'Kondisi C — Perbaikan', icon: '🔴', c: '#ef4444', fn: r => r.filter(x => x['Kondisi'] === 'C').length },
+        { label: 'Terpasang', icon: '✅', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Status'], /terpasang/i)).length },
+        { label: 'Standby', icon: '⏸️', c: '#a78bfa', fn: r => r.filter(x => isTrue(x['Status'], /standby/i)).length },
+        { label: 'Rusak', icon: '🛠️', c: '#ef4444', fn: r => r.filter(x => isTrue(x['Status'], /rusak/i)).length },
+        { label: 'Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi'] && x['Kondisi'] !== 'A').length },
+        { label: 'Ada Catatan', icon: '📝', c: '#f97316', fn: r => r.filter(x => x['Keterangan']).length },
       ],
       charts: [
         { id: 'c1', title: 'Mesin per Komoditi', type: 'bar', key: 'Komoditi' },
@@ -100,9 +106,10 @@
       chips: {
         'Kondisi': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
         'Category': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
-        'Status': v => /terpasang|siap|aktif/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-gray',
+        'Status': v => /terpasang|siap|aktif/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : /standby/i.test(v) ? 'chip-amber' : 'chip-gray',
         'Pompa': v => /sumur/i.test(v) ? 'chip-blue' : 'chip-purple',
         'Jenis': () => 'chip-gray',
+        'Keterangan': () => 'chip-red',
         'Komponen Bermasalah': () => 'chip-red'
       }
     },
@@ -134,7 +141,7 @@
   };
 
   /* ---------- state ---------- */
-  const RAW = {}, state = {}, charts = {}, dirty = {}, compCache = {};
+  const RAW = {}, state = {}, charts = {}, dirty = {};
   let currentTab = 'overview', timer = null, loading = false;
   const newState = () => ({ filters: {}, search: '', sort: null, dir: 1, page: 1, size: Number(localStorage.getItem('fs_pagesize')) || 25 });
 
@@ -150,7 +157,7 @@
     try {
       const d = await DataLayer.fetchAll();
       onData(d);
-      if (manual) toast('Data berhasil disinkronkan ✔');
+      if (manual && !onData.failed) toast('Data berhasil disinkronkan ✔');
     } catch (e) {
       $('syncDot').className = 'dot err'; $('syncInfo').textContent = 'Gagal sinkron';
       toast('Gagal memuat data: ' + e.message, true);
@@ -161,14 +168,16 @@
   };
 
   function onData(d) {
-    const errs = [];
+    const errs = [], kept = [];
     Object.keys(CONFIG).forEach(k => {
-      const s = d.sheets[k] || { headers: [], rows: [] };
+      let s = d.sheets[k] || { headers: [], rows: [] };
+      if (s.error && RAW[k] && RAW[k].rows.length) {
+        // gagal ambil sheet ini → pertahankan data lama (jangan kosongkan dashboard)
+        kept.push(RAW[k].name); RAW[k].stale = true; dirty[k] = true; return;
+      }
       // pre-compute string pencarian per baris (performa)
       s.rows.forEach(r => { r._s = s.headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); });
-      RAW[k] = s;
-      Object.keys(numCache).forEach(x => { if (x.startsWith(k + '\u0001')) delete numCache[x]; });
-      delete compCache[k];
+      s.stale = false; RAW[k] = s;
       if (s.error) errs.push(s.name + ': ' + s.error);
       if (!state[k]) state[k] = newState();
       $('badge-' + k).textContent = fmt(s.rows.length);
@@ -177,10 +186,17 @@
     });
     renderOverview();
     if (currentTab !== 'overview') renderView(currentTab);
-    const t = d.generatedAt;
-    $('syncInfo').textContent = 'Update ' + t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    $('ftime').textContent = 'Terakhir sinkron: ' + t.toLocaleString('id-ID');
-    if (errs.length) toast('Sebagian sheet gagal dimuat: ' + errs.join(' | '), true);
+    const t = d.generatedAt, allKept = kept.length === Object.keys(CONFIG).length;
+    if (!allKept) { $('syncInfo').textContent = 'Update ' + t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }); $('ftime').textContent = 'Terakhir sinkron: ' + t.toLocaleString('id-ID'); }
+    if (kept.length || errs.length) {
+      $('syncDot').className = 'dot err'; if (allKept) $('syncInfo').textContent = 'Offline — data terakhir';
+      toast((kept.length ? 'Gagal sinkron ' + kept.join(', ') + ' — menampilkan data terakhir. ' : '') + (errs.length ? 'Gagal dimuat: ' + errs.join(' | ') : ''), true);
+      onData.failed = true;
+    } else onData.failed = false;
+    // Peringatan kolom konfigurasi yang tidak ditemukan (membantu saat header sheet diganti)
+    const missing = [];
+    Object.keys(CONFIG).forEach(k => { if (!RAW[k].headers.length) return; CONFIG[k].filters.forEach(f => { if (!altKey(RAW[k].headers, f)) missing.push(RAW[k].name + ' → ' + f); }); });
+    if (missing.length) console.warn('[Dashboard] Kolom tidak ditemukan:', missing);
   }
 
   /* ---------- tabs ---------- */
@@ -200,7 +216,7 @@
     if (data.error) { el.innerHTML = `<div class="alert">⚠️ Sheet "<b>${esc(data.name)}</b>" gagal dimuat: ${esc(data.error)}</div>`; return; }
     // hancurkan chart lama milik tab ini (canvas akan dibuat ulang)
     Object.keys(charts).forEach(id => { if (id.startsWith(k + '-')) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; } });
-    const filters = cfg.filters.filter(f => data.headers.includes(f));
+    const filters = [...new Set(cfg.filters.map(f => altKey(data.headers, f)).filter(Boolean))];
     // buang nilai filter lama yang sudah tidak ada di data
     Object.keys(state[k].filters).forEach(f => { if (!filters.includes(f)) delete state[k].filters[f]; });
 
@@ -305,19 +321,12 @@
       rows = [...rows].sort((a, b) => {
         const x = a[c], y = b[c];
         if (x === '' && y !== '') return 1; if (y === '' && x !== '') return -1;
-        return (numeric ? toNumber(x) - toNumber(y) : String(x).localeCompare(String(y), 'id', { numeric: true })) * d;
+        return (numeric ? numv(a, c) - numv(b, c) : String(x).localeCompare(String(y), 'id', { numeric: true })) * d;
       });
     }
     return rows;
   }
-  const numCache = {};
-  function isNumericCol(k, c) {
-    const key = k + '\u0001' + c;
-    if (key in numCache) return numCache[key];
-    let any = false;
-    const ok = RAW[k].rows.every(r => { const v = r[c]; if (v === '') return true; any = true; return !isNaN(toNumber(v)); });
-    return numCache[key] = ok && any;
-  }
+  function isNumericCol(k, c) { return !!(RAW[k].meta && RAW[k].meta.numFmt && RAW[k].meta.numFmt[c]); }
   function resetFilters(k) { const size = state[k].size; state[k] = newState(); state[k].size = size; $(k + '-search').value = ''; syncMsButtons(k); renderView(k); }
   function sortBy(k, c) { const s = state[k]; if (s.sort === c) s.dir *= -1; else { s.sort = c; s.dir = 1; } renderView(k); }
 
@@ -339,8 +348,9 @@
 
     requestAnimationFrame(() => cfg.charts.forEach(c => {
       if (c.custom === 'components') { drawChart(k + '-' + c.id, 'hbar', componentStats(k, rows), 10); return; }
-      if (!headers.includes(c.key)) { const alt = altKey(headers, c.key); if (!alt) { noChart(k + '-' + c.id, c.key); return; } c.key = alt; }
-      let e = count(rows, c.key).filter(x => x[0] !== '(kosong)');
+      const key = altKey(headers, c.key);
+      if (!key) { noChart(k + '-' + c.id, c.key); return; }
+      let e = count(rows, key).filter(x => x[0] !== '(kosong)');
       if (c.type === 'line') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
       else if (c.type === 'bar') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'id', { numeric: true }));
       drawChart(k + '-' + c.id, c.type, e, c.type === 'line' ? 120 : (c.limit || 12), c.colors);
@@ -371,7 +381,8 @@
   function freezeCount(k) {
     const cfg = CONFIG[k], fz = $(k + '-freeze');
     if (!cfg.freezeUntil || (fz && !fz.checked)) return 0;
-    const idx = RAW[k].headers.findIndex(h => h.toLowerCase() === cfg.freezeUntil.toLowerCase());
+    const key = altKey(RAW[k].headers, cfg.freezeUntil);
+    const idx = key ? RAW[k].headers.indexOf(key) : -1;
     return idx < 0 ? 0 : idx + 1;
   }
   function applyFreeze(k) {
@@ -391,21 +402,18 @@
   let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (currentTab !== 'overview') applyFreeze(currentTab); }, 150); });
 
   // cari nama kolom alternatif (case-insensitive / sinonim) jika header sheet berubah
-  const SYN = { 'Divisi': ['Asal Mesin'], 'Asal Mesin': ['Divisi'], 'Komoditi': ['Wil', 'Wilayah', 'WILAYAH'], 'Wil': ['Wilayah', 'WILAYAH', 'Komoditi'] };
+  const SYN = APP_CONFIG.synonyms || {};
   function altKey(headers, key) {
+    if (headers.includes(key)) return key;
     const low = headers.find(h => h.toLowerCase() === String(key).toLowerCase()); if (low) return low;
     return (SYN[key] || []).find(a => headers.includes(a)) || null;
   }
   function noChart(id, key) {
     const c = $(id); if (!c) return;
     if (charts[id]) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; }
-    const box = c.parentElement; box.innerHTML = `<div class="empty" style="padding:70px 10px 0;font-size:12.5px">Kolom "<b>${esc(key)}</b>" tidak ditemukan di sheet</div>`;
+    const box = c.parentElement; box.innerHTML = `<div class="empty" style="padding:70px 10px 0;font-size:12.5px">Kolom "<b>${esc(key)}</b>" tidak ditemukan di sheet</div><canvas id="${id}" hidden></canvas>`;
   }
-  function componentCols(k) {
-    if (compCache[k]) return compCache[k];
-    const skip = new Set((APP_CONFIG.nonComponentCols[k] || []).map(s => s.toLowerCase()).concat(['kondisi', 'komponen bermasalah']));
-    return compCache[k] = RAW[k].headers.filter(h => !skip.has(h.toLowerCase()));
-  }
+  function componentCols(k) { return (RAW[k].meta && RAW[k].meta.compCols) || []; }
   function componentStats(k, rows) {
     const comp = componentCols(k), m = new Map();
     for (const r of rows) for (const h of comp) { const v = r[h]; if (v === 'B' || v === 'C' || v === 'b' || v === 'c') m.set(h, (m.get(h) || 0) + 1); }
@@ -417,8 +425,9 @@
     if (v === '' || v == null) return '<span class="dash">—</span>';
     const cfg = CONFIG[k];
     if (cfg.numCols && cfg.numCols.includes(h)) { const n = toNumber(v); if (!isNaN(n)) return `<span class="num">${fmt(n, 2)}</span>`; }
+    if (h === 'Komponen Bermasalah') return `<span class="chip chip-red" title="${esc(v)}">${esc(v.length > 60 ? v.slice(0, 57) + '…' : v)}</span>`;
     if (cfg.chips && cfg.chips[h]) return `<span class="chip ${cfg.chips[h](String(v))}">${esc(v)}</span>`;
-    if ((k === 'mesin' || k === 'irrigator') && v.length === 1) { const sv = v.toUpperCase(); if (sv === 'A' || sv === 'B' || sv === 'C') return `<span class="cond cond-${sv}">${sv}</span>`; }
+    if (v.length === 1 && (k === 'mesin' || k === 'irrigator')) { const sv = v.toUpperCase(); if (sv === 'A' || sv === 'B' || sv === 'C') return `<span class="cond cond-${sv}">${sv}</span>`; }
     return esc(v);
   }
 
@@ -449,6 +458,7 @@
   };
   function drawChart(id, type, entries, limit = 12, colorMap) {
     const ctx = $(id); if (!ctx || typeof Chart === 'undefined') return;
+    if (ctx.hidden) { ctx.hidden = false; const ph = ctx.parentElement.querySelector('.empty'); if (ph) ph.remove(); }
     entries = entries.slice(0, limit); const tc = themeColors();
     const isBar = type === 'bar' || type === 'hbar', isLine = type === 'line', isPie = type === 'doughnut' || type === 'pie';
     const colors = colorMap ? entries.map((e, i) => colorMap[e[0]] || PALETTE[i % PALETTE.length]) : entries.map((_, i) => PALETTE[i % PALETTE.length]);
@@ -511,7 +521,7 @@
     const d = RAW.detail?.rows || [], s = RAW.sumber?.rows || [], m = RAW.mesin?.rows || [], ir = RAW.irrigator?.rows || [];
     const k = [
       { l: 'Unit Terpasang', v: fmt(d.length), i: '🚜', c: '#22c55e', t: 'detail' },
-      { l: 'Wilayah Aktif', v: uniq(d, 'Wil').length, i: '📍', c: '#38bdf8', t: 'detail' },
+      { l: 'Wilayah Aktif', v: uniq(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil').length, i: '📍', c: '#38bdf8', t: 'detail' },
       { l: 'Total Sumber Air', v: fmt(s.length), i: '🌊', c: '#a78bfa', t: 'sumber' },
       { l: 'Lebung', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length), i: '🏞️', c: '#14b8a6', t: 'sumber' },
       { l: 'Deep Well', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /deep|sumur/i)).length), i: '🕳️', c: '#f59e0b', t: 'sumber' },
@@ -522,12 +532,12 @@
     $('ov-kpis').innerHTML = k.map(x => `<div class="kpi link" style="--c:${x.c}" data-t="${x.t}" title="Buka tab"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${x.l}</div></div>`).join('');
     requestAnimationFrame(() => {
       const nz = a => a.filter(x => x[0] !== '(kosong)');
-      drawChart('ov-c1', 'bar', nz(count(d, 'Wil')).sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'id', { numeric: true })));
+      drawChart('ov-c1', 'bar', nz(count(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil')).sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'id', { numeric: true })));
       drawChart('ov-c2', 'doughnut', nz(count(d, 'Jenis Engine')));
       drawChart('ov-c3', 'doughnut', nz(count(s, 'Jenis Sumber Air')));
       drawChart('ov-c4', 'doughnut', nz(count(ir, 'Status')), 12, { Terpasang: '#22c55e', Rusak: '#ef4444' });
     });
-    const wil = count(d, 'Wil').slice(0, 10), mx = wil[0]?.[1] || 1;
+    const wil = count(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil').filter(x => x[0] !== '(kosong)').slice(0, 10), mx = wil[0]?.[1] || 1;
     $('ov-wil').innerHTML = wil.map(([w, n]) => `<li><b>${esc(w)}</b><div class="bar"><span style="width:${n / mx * 100}%"></span></div><span>${n} unit</span></li>`).join('') || '<li class="empty">Belum ada data</li>';
     const lbl = { A: 'Kondisi A — Baik', B: 'Kondisi B — Perlu Perhatian', C: 'Kondisi C — Perlu Perbaikan' };
     const li = (label, arr) => `<li class="sub"><b>${label}</b></li>` + count(arr, 'Kondisi').sort().map(([c, n]) => `<li><span class="chip ${c === 'A' ? 'chip-green' : c === 'B' ? 'chip-amber' : 'chip-red'}">${c}</span><span style="flex:1;margin-left:10px">${lbl[c] || c}</span><b>${n}</b></li>`).join('');
@@ -562,6 +572,15 @@
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; const b = $('installBtn'); if (b) b.style.display = ''; });
   $('installBtn')?.addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('installBtn').style.display = 'none'; });
   window.addEventListener('appinstalled', () => { toast('Aplikasi berhasil dipasang ✔'); const b = $('installBtn'); if (b) b.style.display = 'none'; });
+
+  /* ---------- Service worker: notifikasi versi baru ---------- */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (window.__swReloading) return; window.__swReloading = true; location.reload(); });
+    navigator.serviceWorker.getRegistration && navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return;
+      reg.addEventListener('updatefound', () => { const nw = reg.installing; nw && nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) toast('Versi baru dashboard tersedia — memuat ulang…'); }); });
+    });
+  }
 
   const h0 = location.hash.replace('#', '');
   loadData(false).then(() => switchTab(h0 || 'overview'));

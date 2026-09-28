@@ -25,8 +25,18 @@ window.APP_CONFIG = {
   },
 
   // Kolom non-komponen (dipakai untuk menghitung kondisi A/B/C keseluruhan unit)
+  // Kolom komponen dideteksi OTOMATIS (kolom yang seluruh isinya A/B/C). Daftar ini hanya pengecualian tambahan
+  // untuk kolom ringkasan yang kebetulan juga berisi A/B/C agar tidak ikut dihitung sebagai komponen.
   nonComponentCols: {
-    mesin:     ['No', 'Kode Unit', 'Spec', 'Pump', 'Divisi', 'Asal Mesin', 'Mesin', 'Prodo', 'Category', 'Jenis', 'HP', 'Pompa', 'Status', 'Komoditi'],
-    irrigator: ['NO', 'KODE UNIT', 'WILAYAH', 'Category', 'Unit', 'Nozzle', 'Status']
+    mesin:     ['Mesin', 'Prodo', 'Category'],
+    irrigator: ['Category']
+  },
+
+  // Sinonim nama kolom: dipakai bila header di spreadsheet diganti namanya
+  synonyms: {
+    'Siram': ['Terpasang'], 'Terpasang': ['Siram'],
+    'HP': ['Power'], 'Power': ['HP'],
+    'Divisi': ['Asal Mesin'], 'Asal Mesin': ['Divisi'],
+    'Komoditi': ['Wil', 'Wilayah', 'WILAYAH'], 'Wil': ['Wilayah', 'WILAYAH', 'Komoditi'], 'Wilayah': ['Wil', 'WILAYAH'], 'WILAYAH': ['Wilayah', 'Wil']
   }
 };

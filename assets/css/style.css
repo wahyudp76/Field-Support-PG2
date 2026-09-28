@@ -159,7 +159,7 @@ footer a{color:var(--muted);text-decoration:underline}
 .ms-acts a{cursor:pointer;color:var(--accent);padding:3px 7px;border-radius:6px;font-weight:600}
 .ms-acts a:hover{background:var(--panel2)}
 .ms-list{max-height:260px;overflow:auto;padding:4px;border-top:1px solid var(--border)}
-.ms-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;font-size:12.5px;cursor:pointer;user-select:none}
+.fgroup .ms-dd label.ms-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;font-size:12.5px;cursor:pointer;user-select:none;text-transform:none;letter-spacing:0;color:var(--text);font-weight:500;overflow:visible;white-space:normal}
 .ms-item:hover{background:var(--panel2)}
 .ms-item.hide{display:none}
 .ms-item input{accent-color:var(--primary);width:15px;height:15px;flex:none;cursor:pointer}

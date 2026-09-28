@@ -60,6 +60,13 @@ Pembacaan kolom berhenti pada header kosong pertama atau kolom terakhir yang dit
 2. **Source:** pilih **GitHub Actions**.
 3. Tunggu workflow *Deploy GitHub Pages* selesai (tab **Actions**), lalu buka https://wahyudp76.github.io/Field-Support-PG2/
 
+## Ketahanan terhadap perubahan sheet
+
+- **Kolom komponen A/B/C dideteksi otomatis** (kolom yang seluruh isinya A/B/C) → menambah/menghapus kolom komponen di sheet Mesin/Irrigator tidak perlu ubah kode.
+- **Format tanggal & angka dideteksi per kolom** (`dd/mm/yyyy` vs `mm/dd/yyyy`, `1.234,56` vs `1234.56`).
+- **Sinonim header** (`assets/js/config.js → synonyms`): mis. `Siram`↔`Terpasang`, `HP`↔`Power`, `Divisi`↔`Asal Mesin`. Jika header diganti nama, dashboard tetap bekerja; kolom yang benar-benar tidak ditemukan dicatat di console (`[Dashboard] Kolom tidak ditemukan`).
+- **Gagal sinkron** (offline / Google tidak dapat diakses): data terakhir tetap ditampilkan, indikator merah "Offline — data terakhir".
+
 ## Kustomisasi
 
 - Ganti ID spreadsheet / nama sheet → `assets/js/config.js`

@@ -24,9 +24,10 @@
 <meta property="og:image" content="https://wahyudp76.github.io/Field-Support-PG2/assets/img/og-cover.png">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/style.css?v=7">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="assets/css/style.css?v=8">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
 </head>
 <body>
 
@@ -88,9 +89,9 @@
   </div>
 </div>
 
-<script src="assets/js/config.js?v=7"></script>
-<script src="assets/js/data.js?v=7"></script>
-<script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/config.js?v=8" defer></script>
+<script src="assets/js/data.js?v=8" defer></script>
+<script src="assets/js/app.js?v=8" defer></script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

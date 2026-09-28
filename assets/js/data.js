@@ -38,18 +38,41 @@
   }
 
   /* ---------- Normalisasi tanggal "5/29/2026" | "23/07/2024" → "2026-05-29" ---------- */
-  function toISODate(v) {
+  function toISODate(v, order) {
     const s = String(v || '').trim();
     let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) {
-      let a = +m[1], b = +m[2], y = m[3];
-      // Jika angka pertama > 12 pasti dd/mm ; jika kedua > 12 pasti mm/dd ; default mm/dd (format gviz US)
-      let mm, dd;
-      if (a > 12) { dd = a; mm = b; } else if (b > 12) { mm = a; dd = b; } else { mm = a; dd = b; }
+      const a = +m[1], b = +m[2], y = m[3];
+      let dd, mm;
+      if (order === 'dmy') { dd = a; mm = b; } else if (order === 'mdy') { mm = a; dd = b; }
+      else if (a > 12) { dd = a; mm = b; } else { mm = a; dd = b; }
+      if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return s;
       return y + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
     }
     m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? m[0] : s;
+  }
+  // Tentukan urutan tanggal satu kolom: jika ada nilai dengan angka pertama > 12 → dd/mm, jika angka kedua > 12 → mm/dd
+  function detectDateOrder(values) {
+    let dmy = 0, mdy = 0;
+    for (const v of values) { const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/\d{4}$/); if (!m) continue; if (+m[1] > 12) dmy++; else if (+m[2] > 12) mdy++; }
+    return dmy > mdy ? 'dmy' : (mdy > 0 ? 'mdy' : 'auto');
+  }
+  // Format angka satu kolom: 'id' (1.234,56) bila ada koma desimal / pola ribuan-titik, selain itu 'en' (1234.56)
+  function detectNumFormat(values) {
+    let id = 0, en = 0, any = 0;
+    for (const v of values) {
+      const t = String(v).trim(); if (!t) continue; any++;
+      if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t) || /^-?\d+,\d+$/.test(t)) id++;
+      else if (/^-?\d+(\.\d+)?$/.test(t)) en++;
+      else return null; // ada teks → bukan kolom numerik
+    }
+    return any ? (id > 0 ? 'id' : 'en') : null;
+  }
+  function parseNum(v, fmt) {
+    const t = String(v).trim(); if (!t) return NaN;
+    if (fmt === 'id') return Number(t.replace(/\./g, '').replace(',', '.'));
+    return Number(t);
   }
 
   /* ---------- fetch dengan timeout + retry ---------- */
@@ -89,36 +112,50 @@
     }
     const headers = rawHeaders.slice(0, last);
 
-    const dateCols = headers.filter(h => /tanggal|date/i.test(h));
-    const rows = raw.slice(1)
-      .map(r => r.slice(0, last))
-      .filter(r => r.some(c => String(c).trim() !== ''))
-      .map((r, i) => {
-        const o = { _i: i };
-        headers.forEach((h, j) => { o[h] = (r[j] == null ? '' : String(r[j]).trim()); });
-        dateCols.forEach(h => { if (o[h]) o[h] = toISODate(o[h]); });
-        return o;
+    const body = raw.slice(1).map(r => r.slice(0, last)).filter(r => r.some(c => String(c).trim() !== ''));
+    const colVals = j => body.map(r => (r[j] == null ? '' : String(r[j]).trim()));
+
+    // Deteksi per kolom: tanggal, angka, komponen A/B/C
+    const dateOrder = {}, numFmt = {}, compCols = [];
+    const nonComp = new Set((APP_CONFIG.nonComponentCols[key] || []).map(x => x.toLowerCase()));
+    headers.forEach((h, j) => {
+      const vals = colVals(j);
+      if (/tanggal|\btgl\b|\bdate\b/i.test(h) && !/update/i.test(h)) { dateOrder[h] = detectDateOrder(vals); return; }
+      const nf = detectNumFormat(vals); if (nf) numFmt[h] = nf;
+      if (APP_CONFIG.nonComponentCols[key] && !nonComp.has(h.toLowerCase())) {
+        let any = false, ok = true;
+        for (const v of vals) { if (!v) continue; any = true; if (!/^[abc]$/i.test(v)) { ok = false; break; } }
+        if (any && ok) compCols.push(h);
+      }
+    });
+
+    const rows = body.map((r, i) => {
+      const o = { _i: i, _num: {} };
+      headers.forEach((h, j) => {
+        let v = r[j] == null ? '' : String(r[j]).trim();
+        if (dateOrder[h] && v) v = toISODate(v, dateOrder[h]);
+        o[h] = v;
+        if (numFmt[h] && v) o._num[h] = parseNum(v, numFmt[h]);
       });
+      return o;
+    });
 
     // Kondisi keseluruhan (A/B/C) untuk sheet komponen
-    const nonComp = APP_CONFIG.nonComponentCols[key];
-    if (nonComp) {
-      const skip = new Set(nonComp.map(s => s.toLowerCase()));
-      const comp = headers.filter(h => !skip.has(h.toLowerCase()));
+    if (compCols.length) {
       rows.forEach(r => {
-        let worst = 'A', bad = [];
-        comp.forEach(h => {
+        let worst = 'A'; const bad = [];
+        for (const h of compCols) {
           const v = r[h].toUpperCase();
           if (v === 'C') { worst = 'C'; bad.push(h + ' (C)'); }
           else if (v === 'B') { if (worst !== 'C') worst = 'B'; bad.push(h + ' (B)'); }
-        });
+        }
         r['Kondisi'] = worst;
         r['Komponen Bermasalah'] = bad.join(', ');
       });
       if (!headers.includes('Kondisi')) headers.push('Kondisi');
       if (!headers.includes('Komponen Bermasalah')) headers.push('Komponen Bermasalah');
     }
-    return { key, name: cfg.name, headers, rows };
+    return { key, name: cfg.name, headers, rows, meta: { dateOrder, numFmt, compCols, fetchedAt: Date.now() } };
   }
 
   /* ---------- Ambil semua sheet paralel ---------- */
@@ -135,5 +172,5 @@
     return out;
   }
 
-  global.DataLayer = { fetchAll, fetchSheet, parseCSV, toNumber, toISODate };
+  global.DataLayer = { fetchAll, fetchSheet, parseCSV, toNumber, toISODate, detectDateOrder, detectNumFormat };
 })(window);
