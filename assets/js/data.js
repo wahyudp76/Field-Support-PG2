@@ -163,7 +163,7 @@
     });
 
     const issues = [];
-    const idCol = headers.find(h => /^(kode unit|kode baru|kode engine|kode|no)$/i.test(h)) || headers[1] || headers[0];
+    const idCol = ['kode unit', 'kode baru', 'kode engine', 'kode'].map(n => headers.find(h => h.toLowerCase() === n)).find(Boolean) || headers[1] || headers[0];
     const rows = body.map((r, i) => {
       const o = { _i: i, _num: {}, _flag: null };
       headers.forEach((h, j) => {
@@ -194,23 +194,24 @@
         else if (n < 0) { const chk = { level: 'warn', reason: 'Nilai negatif', suggest: 'Periksa tanda minus' }; issues.push({ row: r._i + 2, col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; }
       });
     });
-    issues.forEach(x => { x.id = rows[x.row - 2][idCol] || ''; x.sheet = cfg.name; });
 
     // Kondisi keseluruhan (A/B/C) untuk sheet komponen
     if (compCols.length) {
       rows.forEach(r => {
-        let worst = 'A'; const bad = [];
+        let worst = 'A', filled = 0; const bad = [];
         for (const h of compCols) {
-          const v = r[h].toUpperCase();
+          const v = r[h].toUpperCase(); if (v) filled++;
           if (v === 'C') { worst = 'C'; bad.push(h + ' (C)'); }
           else if (v === 'B') { if (worst !== 'C') worst = 'B'; bad.push(h + ' (B)'); }
         }
+        if (!filled) { worst = ''; issues.push({ row: r._i + 2, col: 'Kondisi', value: '(semua komponen kosong)', level: 'info', reason: 'Belum ada penilaian komponen A/B/C', suggest: 'Isi kondisi komponen unit ini' }); }
         r['Kondisi'] = worst;
         r['Komponen Bermasalah'] = bad.join(', ');
       });
       if (!headers.includes('Kondisi')) headers.push('Kondisi');
       if (!headers.includes('Komponen Bermasalah')) headers.push('Komponen Bermasalah');
     }
+    issues.forEach(x => { x.id = rows[x.row - 2][idCol] || ''; x.sheet = cfg.name; });
     return { key, name: cfg.name, headers, rows, issues, meta: { dateOrder, numFmt, compCols, idCol, fetchedAt: Date.now() } };
   }
 

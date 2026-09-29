@@ -151,12 +151,21 @@
   applyTheme(localStorage.getItem('fs_theme') || 'dark');
 
   /* ---------- load ---------- */
+  const CACHE_KEY = 'fs_pg2_data_v1';
+  function saveCache(d) {
+    try { const slim = {}; Object.keys(d.sheets).forEach(k => { const s = d.sheets[k]; if (!s.error) slim[k] = { key: k, name: s.name, headers: s.headers, issues: s.issues, meta: s.meta, rows: s.rows.map(r => { const o = {}; for (const h in r) if (h !== '_s') o[h] = r[h]; return o; }) }; });
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), sheets: slim })); } catch (e) { /* kuota penuh → abaikan */ }
+  }
+  function loadCache() {
+    try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (!c || !c.sheets || Date.now() - c.at > 7 * 864e5) return null; return c; } catch (e) { return null; }
+  }
   window.loadData = async function (manual) {
     if (loading) return; loading = true;
-    const btn = $('refreshBtn'); btn.disabled = true; $('syncInfo').textContent = 'Sinkron…'; $('syncDot').className = 'dot';
+    const btn = $('refreshBtn'); btn.disabled = true; $('syncInfo').textContent = window.__fromCache ? $('syncInfo').textContent : 'Sinkron…'; $('syncDot').className = 'dot'; window.__fromCache = false;
     try {
       const d = await DataLayer.fetchAll();
       onData(d);
+      if (!onData.failed) saveCache(d);
       if (manual && !onData.failed) toast('Data berhasil disinkronkan ✔');
     } catch (e) {
       $('syncDot').className = 'dot err'; $('syncInfo').textContent = 'Gagal sinkron';
@@ -389,16 +398,13 @@
   function applyFreeze(k) {
     const wrap = document.querySelector(`#view-${k} .tbl-wrap`); if (!wrap) return;
     const n = freezeCount(k), ths = wrap.querySelectorAll('thead th');
+    let st = $(k + '-fzstyle'); if (!st) { st = document.createElement('style'); st.id = k + '-fzstyle'; document.head.appendChild(st); }
     wrap.classList.toggle('frozen', n > 0);
-    if (!n) { wrap.querySelectorAll('.fz').forEach(el => { el.classList.remove('fz', 'fz-last'); el.style.left = ''; }); return; }
-    // hitung offset kiri kumulatif dari lebar header
-    const lefts = []; let acc = 0;
-    for (let i = 0; i < n; i++) { lefts.push(acc); acc += ths[i] ? ths[i].getBoundingClientRect().width : 0; }
-    wrap.querySelectorAll('tr').forEach(tr => {
-      const cells = tr.children;
-      for (let i = 0; i < n && i < cells.length; i++) { cells[i].classList.add('fz'); cells[i].classList.toggle('fz-last', i === n - 1); cells[i].style.left = lefts[i] + 'px'; }
-    });
-    wrap.style.setProperty('--fz-w', acc + 'px');
+    if (!n) { st.textContent = ''; return; }
+    // ukur lebar header sekali, tulis aturan CSS nth-child → tidak ada penulisan style per sel
+    let acc = 0, css = '';
+    for (let i = 0; i < n; i++) { css += `#view-${k} .tbl-wrap.frozen tr>:nth-child(${i + 1}){left:${acc}px}`; acc += ths[i] ? ths[i].getBoundingClientRect().width : 0; }
+    st.textContent = css;
   }
   let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (currentTab !== 'overview') applyFreeze(currentTab); }, 150); });
 
@@ -460,8 +466,14 @@
   };
   function drawChart(id, type, entries, limit = 12, colorMap) {
     const ctx = $(id); if (!ctx || typeof Chart === 'undefined') return;
+    entries = entries.slice(0, limit);
+    if (!entries.length || (entries.length === 1 && entries[0][1] === 0 && type === 'hbar')) {
+      if (charts[id]) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; }
+      let ph = ctx.parentElement.querySelector('.empty'); if (!ph) { ph = document.createElement('div'); ph.className = 'empty chart-empty'; ctx.parentElement.appendChild(ph); }
+      ph.textContent = entries.length ? '✅ ' + entries[0][0] : 'Tidak ada data untuk filter ini'; ctx.hidden = true; return;
+    }
     if (ctx.hidden) { ctx.hidden = false; const ph = ctx.parentElement.querySelector('.empty'); if (ph) ph.remove(); }
-    entries = entries.slice(0, limit); const tc = themeColors();
+    const tc = themeColors();
     const isBar = type === 'bar' || type === 'hbar', isLine = type === 'line', isPie = type === 'doughnut' || type === 'pie';
     const colors = colorMap ? entries.map((e, i) => colorMap[e[0]] || PALETTE[i % PALETTE.length]) : entries.map((_, i) => PALETTE[i % PALETTE.length]);
     const labels = entries.map(e => e[0]), data = entries.map(e => e[1]);
@@ -634,5 +646,14 @@
   }
 
   const h0 = location.hash.replace('#', '');
-  loadData(false).then(() => switchTab(h0 || 'overview'));
+  // Tampilkan data sync terakhir secara instan (jika ada), lalu sinkron dari spreadsheet di latar
+  const cached = loadCache();
+  if (cached) {
+    try {
+      onData({ generatedAt: new Date(cached.at), sheets: cached.sheets });
+      $('syncInfo').textContent = 'Data tersimpan ' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' — menyinkronkan…';
+      $('loader').classList.add('hide'); switchTab(h0 || 'overview'); window.__fromCache = true;
+    } catch (e) { console.warn('cache rusak', e); localStorage.removeItem(CACHE_KEY); }
+  }
+  loadData(false).then(() => { if (!cached) switchTab(h0 || 'overview'); });
 })();
