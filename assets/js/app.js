@@ -464,6 +464,23 @@
       ctx.restore();
     }
   };
+  // Plugin: label angka pada setiap batang (tanpa library tambahan)
+  const barValues = {
+    id: 'barValues',
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0); if (!meta || meta.hidden) return;
+      const horiz = chart.options.indexAxis === 'y', g = chart.ctx, col = themeColors().text;
+      g.save(); g.font = '700 11px Inter, system-ui, sans-serif'; g.fillStyle = col;
+      g.textAlign = horiz ? 'left' : 'center'; g.textBaseline = horiz ? 'middle' : 'bottom';
+      meta.data.forEach((bar, i) => {
+        const v = chart.data.datasets[0].data[i]; if (v == null || isNaN(v)) return;
+        const p = bar.getProps(['x', 'y', 'base'], true);
+        if (horiz) g.fillText(fmt(v), p.x + 5, p.y); else g.fillText(fmt(v), p.x, p.y - 4);
+      });
+      g.restore();
+    }
+  };
+
   function drawChart(id, type, entries, limit = 12, colorMap) {
     const ctx = $(id); if (!ctx || typeof Chart === 'undefined') return;
     entries = entries.slice(0, limit);
@@ -504,12 +521,12 @@
     const chart = new Chart(ctx, {
       type: isBar ? 'bar' : 'doughnut',
       data: { labels, datasets: [dataset] },
-      plugins: isPie ? [centerText] : [],
+      plugins: isPie ? [centerText] : isBar ? [barValues] : [],
       options: {
         responsive: true, maintainAspectRatio: false, animation: { duration: 550, easing: 'easeOutQuart' },
         indexAxis: type === 'hbar' ? 'y' : 'x',
         cutout: isPie ? '64%' : undefined,
-        layout: { padding: isPie ? 6 : 0 },
+        layout: { padding: isPie ? 6 : type === 'hbar' ? { right: 36 } : { top: 18 } },
         interaction: { intersect: false, mode: isLine ? 'index' : 'nearest' },
         plugins: {
           legend: { display: isPie, position: 'right', labels: { color: tc.text, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 10, font: { size: 11, weight: '600' } } },
@@ -521,8 +538,8 @@
           }
         },
         scales: (isBar || isLine) ? {
-          x: { ticks: { color: tc.text, maxRotation: 45, autoSkip: true, precision: 0, font: { size: 11 } }, grid: { display: type === 'hbar', color: tc.grid }, border: { display: false } },
-          y: { beginAtZero: true, ticks: { color: tc.text, precision: 0, font: { size: 11 } }, grid: { display: type !== 'hbar', color: tc.grid }, border: { display: false } }
+          x: { beginAtZero: true, grace: type === 'hbar' ? '10%' : 0, ticks: { color: tc.text, maxRotation: 45, autoSkip: true, precision: 0, font: { size: 11 } }, grid: { display: type === 'hbar', color: tc.grid }, border: { display: false } },
+          y: { beginAtZero: true, grace: type === 'hbar' ? 0 : '8%', ticks: { color: tc.text, precision: 0, font: { size: 11 } }, grid: { display: type !== 'hbar', color: tc.grid }, border: { display: false } }
         } : {}
       }
     });
@@ -553,7 +570,7 @@
     });
     const wil = count(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil').filter(x => x[0] !== '(kosong)').slice(0, 10), mx = wil[0]?.[1] || 1;
     $('ov-wil').innerHTML = wil.map(([w, n]) => `<li><b>${esc(w)}</b><div class="bar"><span style="width:${n / mx * 100}%"></span></div><span>${n} unit</span></li>`).join('') || '<li class="empty">Belum ada data</li>';
-    const lbl = { A: 'Kondisi A — Baik', B: 'Kondisi B — Perlu Perhatian', C: 'Kondisi C — Perlu Perbaikan' };
+    const lbl = { '(kosong)': 'Belum dinilai', A: 'Kondisi A — Baik', B: 'Kondisi B — Perlu Perhatian', C: 'Kondisi C — Perlu Perbaikan' };
     const li = (label, arr) => `<li class="sub"><b>${label}</b></li>` + count(arr, 'Kondisi').sort().map(([c, n]) => `<li><span class="chip ${c === 'A' ? 'chip-green' : c === 'B' ? 'chip-amber' : 'chip-red'}">${c}</span><span style="flex:1;margin-left:10px">${lbl[c] || c}</span><b>${n}</b></li>`).join('');
     $('ov-kondisi').innerHTML = li('⚙️ Mesin', m) + li('💦 Irrigator', ir);
   }
