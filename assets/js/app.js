@@ -656,13 +656,13 @@
         <div class="card"><h3>Analisa per Jenis Pipa</h3><div id="pipa-jenis"></div></div>
         <div class="card"><h3>Analisa per Penempatan</h3><div id="pipa-place"></div></div>
       </div>`;
-    el.addEventListener('click', e => {
+    el.onclick = e => { // satu handler saja (bukan addEventListener) agar tidak ganda saat view dibangun ulang setelah sinkron
       const b = e.target.closest('[data-pf]'); if (!b) return;
       if (b.dataset.pf === 'all') { pipaState.place.clear(); pipaState.jenis.clear(); return renderPipa(); }
       const set = pipaState[b.dataset.pf], v = b.dataset.v;
       if (v === '') set.clear(); else set.has(v) ? set.delete(v) : set.add(v);
       renderPipa();
-    });
+    };
   }
 
   function pipaView() {
