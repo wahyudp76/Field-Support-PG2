@@ -240,3 +240,17 @@ td.bad::after{content:"⚠";position:absolute;right:4px;top:3px;font-size:9px;op
 .dim2{opacity:.6;font-size:11px}
 td.cell-warn{color:#f87171;font-weight:700}
 .filters .fgroup:has(.pchips){align-self:flex-start;flex:1 1 260px}
+/* ---- Overview: tata letak layar lebar ---- */
+#view-overview .grid-2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+@media(min-width:1000px){
+  #view-overview .grid-2{grid-template-columns:1fr 1fr}
+  #view-overview .ov-pipa-card{grid-column:1/-1}
+}
+@media(min-width:1500px){
+  #ov-kpis{grid-template-columns:repeat(10,minmax(0,1fr))}
+  #view-overview .grid-2{grid-template-columns:1fr 1fr;align-items:start}
+  #view-overview .ov-pipa-card{grid-column:auto}
+  #view-overview .ov-pipa-grid{grid-template-columns:minmax(220px,.9fr) minmax(0,1.3fr)}
+}
+@media(min-width:1500px){.kpi .val{font-size:26px}}
+@media(min-width:1500px){#ov-pend .ov-pipa-grid{grid-template-columns:1fr}#ov-pend .chart-box{height:200px!important}}
