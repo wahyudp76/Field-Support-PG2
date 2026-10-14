@@ -248,9 +248,16 @@ td.cell-warn{color:#f87171;font-weight:700}
 }
 @media(min-width:1500px){
   #ov-kpis{grid-template-columns:repeat(10,minmax(0,1fr))}
-  #view-overview .grid-2{grid-template-columns:1fr 1fr;align-items:start}
+  #view-overview .grid-2{grid-template-columns:1fr 1fr;align-items:stretch}
   #view-overview .ov-pipa-card{grid-column:auto}
   #view-overview .ov-pipa-grid{grid-template-columns:minmax(220px,.9fr) minmax(0,1.3fr)}
 }
 @media(min-width:1500px){.kpi .val{font-size:26px}}
 @media(min-width:1500px){#ov-pend .ov-pipa-grid{grid-template-columns:1fr}#ov-pend .chart-box{height:200px!important}}
+/* kartu overview: sama tinggi per baris, tombol "Buka analisa" menempel di bawah */
+#view-overview .grid-2 > .card{display:flex;flex-direction:column;min-width:0}
+#view-overview .grid-2 > .card > ul.mini-list{flex:1}
+#ov-pipa,#ov-pend{display:flex;flex-direction:column;flex:1}
+#ov-pipa > .ov-pipa-grid,#ov-pend > .ov-pipa-grid{flex:1}
+#ov-pipa > div:last-child,#ov-pend > div:last-child{margin-top:auto!important;padding-top:8px}
+#ov-pipa > .ov-pipa-grid{align-items:start;align-content:start}
