@@ -131,10 +131,23 @@
   /* ---------- Ambil satu sheet ---------- */
   async function fetchSheet(key) {
     const cfg = APP_CONFIG.sheets[key];
-    const text = await fetchText(APP_CONFIG.csvUrl(cfg.name), cfg.name);
+    // Satu sheet fisik bisa dipakai beberapa key (blok tabel berdampingan) → unduh sekali per siklus sinkron
+    const url = APP_CONFIG.csvUrl(cfg.name).replace(/&t=\d+$/, '');
+    if (!fetchSheet._memo || fetchSheet._memo.url !== url || Date.now() - fetchSheet._memo.at > 5000) fetchSheet._memo = { url, at: Date.now(), p: fetchText(APP_CONFIG.csvUrl(cfg.name), cfg.name) };
+    const text = await fetchSheet._memo.p;
     if (text.trim().startsWith('<')) throw new Error('Spreadsheet belum dibagikan publik (Anyone with the link → Viewer)');
-    const raw = parseCSV(text);
+    let raw = parseCSV(text);
     if (!raw.length) return { key, name: cfg.name, headers: [], rows: [] };
+    // Blok tabel: pilih kelompok kolom (dipisah header kosong) yang headernya cocok dengan cfg.block
+    if (cfg.block) {
+      const hdr = raw[0].map(h => String(h).trim()); const blocks = []; let start = null;
+      hdr.forEach((h, i) => { if (h && start === null) start = i; if (!h && start !== null) { blocks.push([start, i]); start = null; } });
+      if (start !== null) blocks.push([start, hdr.length]);
+      const re = new RegExp(cfg.block, 'i');
+      const b = blocks.find(([a, z]) => hdr.slice(a, z).some(h => re.test(h)) && !hdr.slice(a, z).some(h => /\b(COUNTA?|SUM|AVERAGE|MAX|MIN)\b\s+of\b/i.test(h)));
+      if (!b) throw new Error('Blok tabel dengan header /' + cfg.block + '/ tidak ditemukan di sheet "' + cfg.name + '"');
+      raw = raw.map(r => r.slice(b[0], b[1]));
+    }
 
     // Batas kolom
     const rawHeaders = raw[0].map(h => String(h).trim());

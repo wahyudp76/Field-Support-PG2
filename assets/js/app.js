@@ -114,6 +114,7 @@
       }
     },
     pipa: { title: 'Inventaris Pipa', icon: '🔩', custom: 'pipa', filters: [], kpis: [], charts: [] },
+    pendukung: { title: 'Unit Pendukung', icon: '🚜', custom: 'pendukung', filters: [], kpis: [], charts: [] },
     irrigator: {
       title: 'Inventaris Irrigator', icon: '💦',
       freezeUntil: 'WILAYAH',
@@ -179,6 +180,12 @@
 
   function onData(d) {
     const errs = [], kept = [];
+    // sheet pendamping tanpa tab sendiri (tb_aktwilayah) — diproses lebih dulu agar tersedia saat tab Unit Pendukung dibangun
+    ['aktwil'].forEach(k => {
+      const s = d.sheets[k]; if (!s) return;
+      if (s.error) { if (!(RAW[k] && RAW[k].rows.length)) { RAW[k] = s; errs.push(s.name + ' (' + k + '): ' + s.error); } else RAW[k].stale = true; return; }
+      s.stale = false; RAW[k] = s;
+    });
     Object.keys(CONFIG).forEach(k => {
       let s = d.sheets[k] || { headers: [], rows: [] };
       if (s.error && RAW[k] && RAW[k].rows.length) {
@@ -226,6 +233,7 @@
     const cfg = CONFIG[k], data = RAW[k], el = $('view-' + k);
     if (data.error) { el.innerHTML = `<div class="alert">⚠️ Sheet "<b>${esc(data.name)}</b>" gagal dimuat: ${esc(data.error)}</div>`; return; }
     if (cfg.custom === 'pipa') return buildPipa();
+    if (cfg.custom === 'pendukung') return buildPend();
     // hancurkan chart lama milik tab ini (canvas akan dibuat ulang)
     Object.keys(charts).forEach(id => { if (id.startsWith(k + '-')) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; } });
     const filters = [...new Set(cfg.filters.map(f => altKey(data.headers, f)).filter(Boolean))];
@@ -347,6 +355,7 @@
     if (!RAW[k] || RAW[k].error || !$(k + '-kpis')) return;
     dirty[k] = false;
     if (CONFIG[k].custom === 'pipa') return renderPipa();
+    if (CONFIG[k].custom === 'pendukung') return renderPend();
     const cfg = CONFIG[k], rows = filtered(k), s = state[k], headers = RAW[k].headers;
 
     $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div></div>`).join('');
@@ -566,6 +575,7 @@
       { l: 'Total Irrigator', v: fmt(ir.length), i: '💦', c: '#06b6d4', t: 'irrigator' },
       { l: 'Volume Air Real (m³)', v: fmt(sum(s, 'Volume Real Ukur (Overflow Terbuka)')), i: '📏', c: '#6366f1', t: 'sumber' },
       { l: 'Total Pipa (batang)', v: fmt(pipaModel().grand), i: '🔩', c: '#f97316', t: 'pipa' },
+      { l: 'Unit Pendukung', v: fmt((RAW.pendukung && !RAW.pendukung.error ? RAW.pendukung.rows : []).length), i: '🚜', c: '#84cc16', t: 'pendukung' },
     ];
     $('ov-kpis').innerHTML = k.map(x => `<div class="kpi link" style="--c:${x.c}" data-t="${x.t}" title="Buka tab"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${x.l}</div></div>`).join('');
     requestAnimationFrame(() => {
@@ -581,6 +591,7 @@
     const li = (label, arr) => `<li class="sub"><b>${label}</b></li>` + count(arr, 'Kondisi').sort().map(([c, n]) => `<li><span class="chip ${c === 'A' ? 'chip-green' : c === 'B' ? 'chip-amber' : 'chip-red'}">${c}</span><span style="flex:1;margin-left:10px">${lbl[c] || c}</span><b>${n}</b></li>`).join('');
     $('ov-kondisi').innerHTML = li('⚙️ Mesin', m) + li('💦 Irrigator', ir);
     renderPipaResume();
+    renderPendResume();
   }
   $('ov-kpis').addEventListener('click', e => { const c = e.target.closest('[data-t]'); if (c) switchTab(c.dataset.t); });
 
@@ -742,6 +753,179 @@
     requestAnimationFrame(() => drawStacked('ov-pipa-chart', M.places.map(p => p.name), M.jenis.map((j, i) => ({ label: j.name, data: M.places.map(p => p.jenis[j.name].total), backgroundColor: PALETTE[(i + 1) % PALETTE.length] }))));
   }
 
+
+  /* ---------- UNIT PENDUKUNG (tb_pendukung + tb_aktwilayah) ---------- */
+  const pendState = { wil: new Set(), jenis: new Set(), akt: new Set(), q: '' };
+  const AKT_C = { Herbi: '#a78bfa', Cor: '#f59e0b', 'Air Bersih': '#38bdf8' };
+  let pendCache = null;
+  function pendModel(force) {
+    const P = RAW.pendukung, A = RAW.aktwil;
+    if (pendCache && !force && pendCache.P === P && pendCache.A === A) return pendCache;
+    const pRows = (P && !P.error && P.rows) || [], aRows = (A && !A.error && A.rows) || [];
+    const ph = (P && P.headers) || [], ah = (A && A.headers) || [];
+    const pWil = altKey(ph, 'Wilayah') || 'Wilayah', pJenis = altKey(ph, 'Aktivitas') || ph.find(h => /jenis|aktivitas|unit/i.test(h) && !/kode/i.test(h)) || 'Aktivitas', pKode = altKey(ph, 'Kode Unit') || ph.find(h => /kode/i.test(h)) || 'Kode Unit';
+    const aWil = altKey(ah, 'Wilayah') || 'Wilayah', aAkt = altKey(ah, 'Aktivitas') || 'Aktivitas', aKode = altKey(ah, 'Kode') || 'Kode', aVol = ah.find(h => /volume|kapasitas/i.test(h)) || 'Volume';
+    const wil = [...new Set([...pRows.map(r => r[pWil]), ...aRows.map(r => r[aWil])].filter(Boolean))].sort();
+    const jenis = [...new Set(pRows.map(r => r[pJenis]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+    const akt = [...new Set(aRows.map(r => r[aAkt]).filter(Boolean))].sort();
+    // Pemeriksaan kualitas: kode duplikat, kode placeholder 0000, prefix kode ≠ mayoritas jenis, volume jauh di bawah median aktivitas
+    const issues = [];
+    const byKode = new Map(); pRows.forEach(r => { const k = (r[pKode] || '').trim(); if (!k) return; byKode.set(k, (byKode.get(k) || []).concat(r)); });
+    byKode.forEach((rs, k) => { if (/0{4}$/.test(k)) rs.forEach(r => issues.push({ row: r._i + 2, col: pKode, value: k, level: 'info', reason: 'Kode unit placeholder (…0000) — unit belum diberi nomor', suggest: 'Isi kode unit sebenarnya' })); else if (rs.length > 1) rs.forEach(r => issues.push({ row: r._i + 2, col: pKode, value: k, level: 'warn', reason: 'Kode unit duplikat (' + rs.length + '× : ' + rs.map(x => x[pWil]).join(', ') + ')', suggest: 'Pastikan satu kode untuk satu unit' })); });
+    const pref = {}; pRows.forEach(r => { const m = (r[pKode] || '').match(/^[A-Z]+/); if (!m || !r[pJenis]) return; (pref[r[pJenis]] = pref[r[pJenis]] || {})[m[0]] = (pref[r[pJenis]][m[0]] || 0) + 1; });
+    const major = {}; Object.keys(pref).forEach(j => { major[j] = Object.entries(pref[j]).sort((a, b) => b[1] - a[1])[0][0]; });
+    // awalan kode yang menjadi mayoritas pada jenis lain → kemungkinan salah jenis / salah kode (info)
+    const owner = {}; Object.keys(major).forEach(j => { const p = major[j]; if (!owner[p] || pref[j][p] > pref[owner[p]][p]) owner[p] = j; });
+    pRows.forEach(r => { const m = (r[pKode] || '').match(/^[A-Z]+/); if (!m || !r[pJenis] || /0{4}$/.test(r[pKode])) return; const o = owner[m[0]]; if (o && o !== r[pJenis]) issues.push({ row: r._i + 2, col: pKode, value: r[pKode], level: 'info', reason: 'Awalan kode "' + m[0] + '" umumnya dipakai jenis ' + o + ', tetapi unit ini tercatat sebagai ' + r[pJenis], suggest: 'Periksa apakah jenis unit atau kode yang keliru' }); });
+    const medAkt = {}; akt.forEach(a => { const v = aRows.filter(r => r[aAkt] === a).map(r => numv(r, aVol)).filter(n => !isNaN(n) && n > 0).sort((x, y) => x - y); medAkt[a] = v.length ? v[Math.floor(v.length / 2)] : 0; });
+    aRows.forEach(r => { const n = numv(r, aVol); if (!isNaN(n) && n > 0 && medAkt[r[aAkt]] && n < medAkt[r[aAkt]] * 0.4) issues.push({ row: r._i + 2, col: aVol, value: r[aVol], level: 'info', reason: 'Volume jauh di bawah median aktivitas ' + r[aAkt] + ' (' + fmt(medAkt[r[aAkt]]) + ') — mungkin salah ketik', suggest: 'Periksa, mis. seharusnya ' + fmt(n * 10) + '?' }); });
+    const dupA = new Map(); aRows.forEach(r => { const k = (r[aKode] || '').trim(); if (k) dupA.set(k, (dupA.get(k) || 0) + 1); }); aRows.forEach(r => { if (dupA.get((r[aKode] || '').trim()) > 1) issues.push({ row: r._i + 2, col: aKode, value: r[aKode], level: 'warn', reason: 'Kode tangki duplikat', suggest: 'Pastikan satu kode untuk satu tangki' }); });
+    if (P && !P.error) { P.issues = (P.issues || []).filter(x => !x._calc); issues.filter(x => x.col === pKode || x.col === pJenis).forEach(x => { x._calc = true; x.sheet = P.name + ' › tb_pendukung'; x.id = x.value; P.issues.push(x); }); }
+    if (A && !A.error) { A.issues = (A.issues || []).filter(x => !x._calc); issues.filter(x => x.col === aVol || x.col === aKode).forEach(x => { x._calc = true; x.sheet = A.name + ' › tb_aktwilayah'; x.id = x.value; A.issues.push(x); }); }
+    pendCache = { P, A, pRows, aRows, pWil, pJenis, pKode, aWil, aAkt, aKode, aVol, wil, jenis, akt, ok: !!(P && !P.error && pRows.length), okA: !!(A && !A.error && aRows.length) };
+    return pendCache;
+  }
+
+  function buildPend() {
+    const el = $('view-pendukung');
+    pendModel(true);
+    Object.keys(charts).forEach(id => { if (id.startsWith('pend-')) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; } });
+    el.innerHTML = `
+      <div class="kpis" id="pendukung-kpis"></div>
+      <div class="filters" id="pend-filters"></div>
+      <div class="active-filters" id="pend-af"></div>
+      <div class="charts">
+        <div class="card"><h3>Unit Pendukung per Wilayah &amp; Jenis</h3><div class="chart-box"><canvas id="pend-c1"></canvas></div></div>
+        <div class="card"><h3>Komposisi Jenis Unit</h3><div class="chart-box"><canvas id="pend-c2"></canvas></div></div>
+        <div class="card"><h3>Tangki Aktivitas per Wilayah <span class="blank-note">tb_aktwilayah</span></h3><div class="chart-box"><canvas id="pend-c3"></canvas></div></div>
+        <div class="card"><h3>Rata-rata Volume Tangki (L) per Wilayah &amp; Aktivitas</h3><div class="chart-box"><canvas id="pend-c4"></canvas></div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><h3>Matriks Jenis Unit × Wilayah <span class="blank-note">tb_pendukung</span></h3><div style="overflow:auto"><table class="pipa-tbl mini-tbl" id="pend-mx1"></table></div></div>
+        <div class="card"><h3>Matriks Aktivitas × Wilayah <span class="blank-note">tb_aktwilayah · liter</span></h3><div style="overflow:auto"><table class="pipa-tbl mini-tbl" id="pend-mx2"></table></div></div>
+      </div>
+      <div class="tbl-head" style="margin-top:16px"><h3>🚜 Daftar Unit Pendukung <span class="blank-note">tb_pendukung</span></h3><div class="tbl-tools"><input type="text" id="pend-q" class="pend-q" placeholder="🔍 Cari kode / jenis / wilayah" autocomplete="off"><span class="info" id="pend-info"></span></div></div>
+      <div class="tbl-wrap" style="max-height:420px"><table><thead id="pend-th"></thead><tbody id="pend-tb"></tbody></table></div>
+      <div class="tbl-head" style="margin-top:16px"><h3>🛢️ Daftar Tangki Aktivitas <span class="blank-note">tb_aktwilayah</span></h3><div class="tbl-tools"><span class="info" id="pend-infoA"></span></div></div>
+      <div class="tbl-wrap" style="max-height:420px"><table><thead id="pend-thA"></thead><tbody id="pend-tbA"></tbody></table></div>`;
+    el.onclick = e => {
+      const b = e.target.closest('[data-pf]'); if (!b) return;
+      if (b.dataset.pf === 'all') { pendState.wil.clear(); pendState.jenis.clear(); pendState.akt.clear(); return renderPend(); }
+      const set = pendState[b.dataset.pf], v = b.dataset.v;
+      if (v === '') set.clear(); else set.has(v) ? set.delete(v) : set.add(v);
+      renderPend();
+    };
+    $('pend-q').oninput = debounce(() => { pendState.q = $('pend-q').value.toLowerCase().trim(); renderPendList(); }, 200);
+  }
+
+  function pendView() {
+    const M = pendModel();
+    const p = M.pRows.filter(r => (!pendState.wil.size || pendState.wil.has(r[M.pWil])) && (!pendState.jenis.size || pendState.jenis.has(r[M.pJenis])));
+    const a = M.aRows.filter(r => (!pendState.wil.size || pendState.wil.has(r[M.aWil])) && (!pendState.akt.size || pendState.akt.has(r[M.aAkt])));
+    const wil = M.wil.filter(w => !pendState.wil.size || pendState.wil.has(w));
+    const jenis = M.jenis.filter(j => !pendState.jenis.size || pendState.jenis.has(j));
+    const akt = M.akt.filter(x => !pendState.akt.size || pendState.akt.has(x));
+    return { M, p, a, wil, jenis, akt };
+  }
+  const avg = (rows, k) => { const v = rows.map(r => numv(r, k)).filter(n => !isNaN(n)); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0; };
+
+  function renderPend() {
+    const V = pendView(), M = V.M; dirty.pendukung = false;
+    if (!M.ok) { $('pendukung-kpis').innerHTML = `<div class="alert">⚠️ Tabel tb_pendukung (kolom Wilayah / Aktivitas / Kode Unit) tidak ditemukan di sheet "Unit Pendukung".</div>`; return; }
+    const volTot = sum(V.a, M.aVol), volAvg = avg(V.a, M.aVol);
+    const kp = [
+      { l: 'Total Unit Pendukung', v: fmt(V.p.length), i: '🚜', c: '#84cc16' },
+      { l: 'Wilayah', v: fmt(V.wil.length), i: '📍', c: '#38bdf8' },
+      { l: 'Jenis Unit', v: fmt(new Set(V.p.map(r => r[M.pJenis])).size), i: '🧩', c: '#a78bfa' },
+      { l: 'Jenis Terbanyak', v: esc((count(V.p, M.pJenis).filter(x => x[0] !== '(kosong)')[0] || ['–'])[0]), s: (count(V.p, M.pJenis)[0] || [0, 0])[1] + ' unit', i: '🏆', c: '#f59e0b', small: true },
+      { l: 'Tangki Aktivitas', v: fmt(V.a.length), s: M.okA ? V.akt.join(' · ') : 'tb_aktwilayah tidak terbaca', i: '🛢️', c: '#14b8a6' },
+      { l: 'Kapasitas Total (L)', v: fmt(volTot), i: '💧', c: '#06b6d4' },
+      { l: 'Rata-rata Volume (L)', v: fmt(volAvg), i: '📐', c: '#6366f1' },
+      { l: 'Kode Belum Final (…0000)', v: fmt(V.p.filter(r => /0{4}$/.test(r[M.pKode] || '')).length), i: '🏷️', c: '#ef4444' },
+    ];
+    $('pendukung-kpis').innerHTML = kp.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.i}</div><div class="val${x.small ? ' small' : ''}">${x.v}</div><div class="lbl">${esc(x.l)}${x.s ? `<span class="kpi-sub">${esc(x.s)}</span>` : ''}</div></div>`).join('');
+    const chipRow = (label, key, items) => `<div class="fgroup"><label>${label}</label><div class="pchips">${[['', 'Semua']].concat(items.map(x => [x, x])).map(([v, t]) => `<button type="button" class="pchip ${(v === '' ? !pendState[key].size : pendState[key].has(v)) ? 'on' : ''}" data-pf="${key}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div></div>`;
+    $('pend-filters').innerHTML = chipRow('📍 Wilayah', 'wil', M.wil) + chipRow('🧩 Jenis Unit', 'jenis', M.jenis) + (M.okA ? chipRow('🛢️ Aktivitas Tangki', 'akt', M.akt) : '');
+    const act = [...pendState.wil, ...pendState.jenis, ...pendState.akt];
+    $('pend-af').innerHTML = act.length ? `<span class="chip chip-blue">Filter aktif: ${act.map(esc).join(', ')}</span> <button class="btn btn-outline btn-sm" data-pf="all" data-v="">✕ Reset</button>` : '';
+
+    const byWJ = w => j => V.p.filter(r => r[M.pWil] === w && r[M.pJenis] === j).length;
+    requestAnimationFrame(() => {
+      drawStacked('pend-c1', V.wil, V.jenis.map((j, i) => ({ label: j, data: V.wil.map(w => byWJ(w)(j)), backgroundColor: PALETTE[i % PALETTE.length] })), 'unit');
+      drawChart('pend-c2', 'doughnut', count(V.p, M.pJenis).filter(x => x[0] !== '(kosong)'), 14);
+      if (M.okA) {
+        drawStacked('pend-c3', V.wil, V.akt.map((a, i) => ({ label: a, data: V.wil.map(w => V.a.filter(r => r[M.aWil] === w && r[M.aAkt] === a).length), backgroundColor: AKT_C[a] || PALETTE[(i + 3) % PALETTE.length] })), 'tangki');
+        drawGrouped('pend-c4', V.wil, V.akt.map((a, i) => ({ label: a, data: V.wil.map(w => Math.round(avg(V.a.filter(r => r[M.aWil] === w && r[M.aAkt] === a), M.aVol))), backgroundColor: AKT_C[a] || PALETTE[(i + 3) % PALETTE.length] })), 'L');
+      } else { noChart('pend-c3', 'tb_aktwilayah'); noChart('pend-c4', 'tb_aktwilayah'); }
+    });
+
+    // matriks jenis × wilayah
+    const cellN = n => `<td class="num">${n ? fmt(n) : '<span class="dim">–</span>'}</td>`;
+    $('pend-mx1').innerHTML = `<thead><tr><th>Jenis Unit</th>${V.wil.map(w => `<th class="num">${esc(w)}</th>`).join('')}<th class="num tot">Total</th></tr></thead><tbody>${V.jenis.map(j => `<tr><td><b>${esc(j)}</b></td>${V.wil.map(w => cellN(byWJ(w)(j))).join('')}<td class="num tot">${fmt(V.p.filter(r => r[M.pJenis] === j).length)}</td></tr>`).join('')}</tbody><tfoot><tr><td><b>Total</b></td>${V.wil.map(w => `<td class="num"><b>${fmt(V.p.filter(r => r[M.pWil] === w).length)}</b></td>`).join('')}<td class="num tot"><b>${fmt(V.p.length)}</b></td></tr></tfoot>`;
+    // matriks aktivitas × wilayah (jumlah · rata-rata volume)
+    if (M.okA) {
+      const cellA = rows => rows.length ? `<td class="num"><b>${fmt(rows.length)}</b> <span class="dim2">· ${fmt(avg(rows, M.aVol))} L</span></td>` : '<td class="num"><span class="dim">–</span></td>';
+      $('pend-mx2').innerHTML = `<thead><tr><th>Aktivitas</th>${V.wil.map(w => `<th class="num">${esc(w)}</th>`).join('')}<th class="num tot">Total</th></tr></thead><tbody>${V.akt.map(a => `<tr><td><b>${esc(a)}</b></td>${V.wil.map(w => cellA(V.a.filter(r => r[M.aWil] === w && r[M.aAkt] === a))).join('')}${cellA(V.a.filter(r => r[M.aAkt] === a)).replace('class="num"', 'class="num tot"')}</tr>`).join('')}</tbody><tfoot><tr><td><b>Total</b></td>${V.wil.map(w => cellA(V.a.filter(r => r[M.aWil] === w))).join('')}${cellA(V.a).replace('class="num"', 'class="num tot"')}</tr></tfoot><caption style="caption-side:bottom;text-align:left;font-size:11px;color:var(--muted);padding-top:6px">Format sel: jumlah tangki · rata-rata volume (liter)</caption>`;
+    } else $('pend-mx2').innerHTML = '<tbody><tr><td class="empty">tb_aktwilayah tidak terbaca</td></tr></tbody>';
+    renderPendList();
+  }
+
+  function renderPendList() {
+    const V = pendView(), M = V.M, q = pendState.q;
+    const ph = M.P.headers, rows = q ? V.p.filter(r => ph.some(h => String(r[h] || '').toLowerCase().includes(q))) : V.p;
+    $('pend-th').innerHTML = '<tr><th>#</th>' + ph.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>';
+    $('pend-tb').innerHTML = rows.map((r, i) => `<tr>${[i + 1, ...ph.map(h => r[h])].map((v, j) => `<td class="${j === ph.length && /0{4}$/.test(v || '') ? 'cell-warn' : ''}">${esc(v ?? '')}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${ph.length + 1}" class="empty">Tidak ada data</td></tr>`;
+    $('pend-info').textContent = `${fmt(rows.length)} dari ${fmt(M.pRows.length)} unit`;
+    if (M.okA) {
+      const ah = M.A.headers, ar = q ? V.a.filter(r => ah.some(h => String(r[h] || '').toLowerCase().includes(q))) : V.a;
+      $('pend-thA').innerHTML = '<tr>' + ah.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>';
+      $('pend-tbA').innerHTML = ar.map(r => `<tr>${ah.map(h => { const n = h === M.aVol ? numv(r, M.aVol) : NaN; const fl = r._flag && r._flag[h]; return `<td class="${h === M.aVol ? 'num' : ''}${fl ? ' bad' : ''}" ${fl ? `title="${esc(fl.reason)}"` : ''}>${h === M.aVol && !isNaN(n) ? fmt(n) : esc(r[h] ?? '')}</td>`; }).join('')}</tr>`).join('') || `<tr><td colspan="${ah.length}" class="empty">Tidak ada data</td></tr>`;
+      $('pend-infoA').textContent = `${fmt(ar.length)} dari ${fmt(M.aRows.length)} tangki · total ${fmt(sum(ar, M.aVol))} L`;
+    }
+  }
+
+  function renderPendResume() {
+    const el = $('ov-pend'); if (!el) return;
+    const M = pendModel();
+    if (!M.ok) { el.innerHTML = `<ul class="mini-list"><li class="empty">${RAW.pendukung && RAW.pendukung.error ? 'Sheet Unit Pendukung gagal dimuat' : 'Belum ada data unit pendukung'}</li></ul>`; return; }
+    const top = count(M.pRows, M.pJenis).filter(x => x[0] !== '(kosong)').slice(0, 5);
+    el.innerHTML = `
+      <div class="ov-pipa-top"><div><div class="big" style="color:#84cc16">${fmt(M.pRows.length)}</div><div class="lbl">Unit pendukung · ${M.wil.length} wilayah · ${M.jenis.length} jenis</div></div>
+        <div><div class="big" style="color:#14b8a6;font-size:24px">${fmt(M.aRows.length)} <span style="font-size:12px;font-weight:600;color:var(--muted)">tangki</span></div><div class="lbl">Rata-rata ${fmt(avg(M.aRows, M.aVol))} L · total ${fmt(sum(M.aRows, M.aVol))} L</div></div></div>
+      <div class="ov-pipa-grid"><div class="chart-box" style="height:220px"><canvas id="ov-pend-chart"></canvas></div><div style="overflow:auto">
+      <table class="mini-tbl"><thead><tr><th>Wilayah</th><th class="num">Unit</th>${top.map(t => `<th class="num" title="${esc(t[0])}">${esc(t[0].replace(/^Tangki /, 'T. ').replace(/^Trailer /, 'Tr. ').replace(/^Bak Trailer /, 'Bak Tr. '))}</th>`).join('')}<th class="num">Tangki</th><th class="num">Ø Vol (L)</th></tr></thead>
+      <tbody>${M.wil.map(w => { const pr = M.pRows.filter(r => r[M.pWil] === w), ar = M.aRows.filter(r => r[M.aWil] === w); return `<tr><td><b>${esc(w)}</b></td><td class="num"><b>${fmt(pr.length)}</b></td>${top.map(t => `<td class="num">${fmt(pr.filter(r => r[M.pJenis] === t[0]).length) || '<span class="dim">–</span>'}</td>`).join('')}<td class="num">${fmt(ar.length)}</td><td class="num">${ar.length ? fmt(avg(ar, M.aVol)) : '–'}</td></tr>`; }).join('')}</tbody>
+      <tfoot><tr><td><b>Total</b></td><td class="num"><b>${fmt(M.pRows.length)}</b></td>${top.map(t => `<td class="num"><b>${fmt(t[1])}</b></td>`).join('')}<td class="num"><b>${fmt(M.aRows.length)}</b></td><td class="num"><b>${fmt(avg(M.aRows, M.aVol))}</b></td></tr></tfoot></table></div></div>
+      <div style="text-align:right;margin-top:8px"><a href="#pendukung" class="btn btn-outline btn-sm" onclick="switchTab('pendukung');return false;">Buka analisa Unit Pendukung →</a></div>`;
+    requestAnimationFrame(() => drawStacked('ov-pend-chart', M.wil, M.jenis.map((j, i) => ({ label: j, data: M.wil.map(w => M.pRows.filter(r => r[M.pWil] === w && r[M.pJenis] === j).length), backgroundColor: PALETTE[i % PALETTE.length] })), 'unit'));
+  }
+
+  // Chart batang berkelompok (grouped) dengan label nilai
+  function drawGrouped(id, labels, datasets, unit) {
+    const ctx = $(id); if (!ctx || typeof Chart === 'undefined') return;
+    const tc = themeColors(); datasets = datasets.map(d => ({ ...d, borderRadius: 5, borderSkipped: false, maxBarThickness: 40 }));
+    let ex = charts[id];
+    if (ex && (ex.canvas !== ctx || !ctx.isConnected || ex._t !== 'grouped')) { try { ex.destroy(); } catch (e) {} delete charts[id]; ex = null; }
+    if (ex) { ex.data.labels = labels; ex.data.datasets = datasets; ex.options.plugins.legend.labels.color = tc.text; ex.options.scales.x.ticks.color = ex.options.scales.y.ticks.color = tc.text; ex.options.scales.y.grid.color = tc.grid; ex.update(); return; }
+    const groupValues = { id: 'groupValues', afterDatasetsDraw(c) { const g = c.ctx; g.save(); g.font = '700 10px Inter, system-ui, sans-serif'; g.fillStyle = themeColors().text; g.textAlign = 'center'; g.textBaseline = 'bottom'; c.data.datasets.forEach((d, di) => { if (!c.isDatasetVisible(di)) return; c.getDatasetMeta(di).data.forEach((bar, i) => { const v = d.data[i]; if (v) g.fillText(fmt(v), bar.x, bar.y - 3); }); }); g.restore(); } };
+    const chart = new Chart(ctx, {
+      type: 'bar', data: { labels, datasets }, plugins: [groupValues],
+      options: {
+        responsive: true, maintainAspectRatio: false, locale: 'id-ID', animation: { duration: 550, easing: 'easeOutQuart' }, layout: { padding: { top: 16 } },
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { color: tc.text, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 10, font: { size: 11, weight: '600' } } },
+          tooltip: { backgroundColor: 'rgba(15,23,42,.92)', padding: 10, cornerRadius: 10, titleFont: { weight: '700' }, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} ${unit || ''}` } }
+        },
+        scales: {
+          x: { ticks: { color: tc.text, font: { size: 11 } }, grid: { display: false }, border: { display: false } },
+          y: { beginAtZero: true, grace: '10%', ticks: { color: tc.text, precision: 0, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }
+        }
+      }
+    });
+    chart._t = 'grouped'; charts[id] = chart;
+  }
+
   // Chart batang bertumpuk (stacked) dengan total di atas tiap batang
   const stackTotals = {
     id: 'stackTotals',
@@ -754,7 +938,7 @@
       g.restore();
     }
   };
-  function drawStacked(id, labels, datasets) {
+  function drawStacked(id, labels, datasets, unit = 'batang') {
     const ctx = $(id); if (!ctx || typeof Chart === 'undefined') return;
     const tc = themeColors(); datasets = datasets.map(d => ({ ...d, borderRadius: 4, borderSkipped: false, maxBarThickness: 54 }));
     let ex = charts[id];
@@ -767,7 +951,7 @@
         interaction: { intersect: false, mode: 'index' },
         plugins: {
           legend: { display: true, position: 'bottom', labels: { color: tc.text, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 10, font: { size: 11, weight: '600' } } },
-          tooltip: { backgroundColor: 'rgba(15,23,42,.92)', padding: 10, cornerRadius: 10, titleFont: { weight: '700' }, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} batang`, footer: it => 'Total: ' + fmt(it.reduce((a, c) => a + c.parsed.y, 0)) + ' batang' } }
+          tooltip: { backgroundColor: 'rgba(15,23,42,.92)', padding: 10, cornerRadius: 10, titleFont: { weight: '700' }, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} ${unit}`, footer: it => 'Total: ' + fmt(it.reduce((a, c) => a + c.parsed.y, 0)) + ' ' + unit } }
         },
         scales: {
           x: { stacked: true, ticks: { color: tc.text, font: { size: 11 } }, grid: { display: false }, border: { display: false } },
@@ -782,6 +966,7 @@
   let ISSUES = [], lastIssueSig = '';
   function updateIssues() {
     ISSUES = [];
+    if (RAW.aktwil && !RAW.aktwil.error) (RAW.aktwil.issues || []).forEach(x => ISSUES.push({ ...x, key: 'pendukung' }));
     Object.keys(CONFIG).forEach(k => {
       (RAW[k].issues || []).forEach(x => ISSUES.push({ ...x, key: k }));
       // header kolom yang dipakai filter/chart/KPI tidak ditemukan → peringatan terlihat (bukan hanya console)
@@ -816,7 +1001,7 @@
     $('issuesBody').innerHTML = list.length ? list.slice(0, 500).map(x => `<tr class="clickable" data-key="${x.key}" data-row="${x.row}"><td>${chip(x.level)}</td><td>${esc(x.sheet)}</td><td><b>${x.row}</b></td><td>${esc(x.id)}</td><td>${esc(x.col)}</td><td class="v">${esc(x.value)}</td><td>${esc(x.reason)}</td><td class="s">${esc(x.suggest)}</td></tr>`).join('') + (list.length > 500 ? `<tr><td colspan="8" class="empty">… ${list.length - 500} lainnya (export CSV untuk lengkap)</td></tr>` : '')
       : '<tr><td colspan="8" class="empty">✅ Tidak ada temuan untuk filter ini</td></tr>';
   }
-  window.openIssues = () => { $('issuesModal').classList.add('show'); renderIssues(); };
+  window.openIssues = () => { if (!ISSUES.some(x => x.level !== 'info')) $('iss-info').checked = true; $('issuesModal').classList.add('show'); renderIssues(); };
   window.closeIssues = () => $('issuesModal').classList.remove('show');
   window.exportIssues = () => {
     const h = ['Level', 'Sheet', 'Baris', 'Kode', 'Kolom', 'Nilai Terinput', 'Masalah', 'Saran'];

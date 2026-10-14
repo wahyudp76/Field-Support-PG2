@@ -69,6 +69,15 @@ Sheet **Pipa** berbentuk matriks ringkasan (bukan daftar per unit): baris = *Pla
 - Isi tab: KPI (total, per jenis, Good/Average/Poor+Reject, penempatan), filter chip penempatan & jenis, chart (stacked per penempatan & jenis, komposisi jenis, kondisi, kondisi per penempatan), matriks seperti di sheet + baris total, analisa per jenis dan per penempatan.
 - Overview: KPI *Total Pipa* dan kartu *Resume Inventaris Pipa* (chart + tabel ringkas + persentase Poor/Reject).
 
+## Tab Unit Pendukung (tb_pendukung + tb_aktwilayah)
+
+Sheet **Unit Pendukung** berisi dua tabel berdampingan dalam satu sheet; dashboard membacanya sebagai dua blok (dipisah kolom header kosong, dipilih berdasarkan header penanda di `config.js`: `block: '^kode\s*unit$'` dan `block: '^volume'`). Pivot bantuan di kanan (COUNTA/AVERAGE) otomatis diabaikan.
+
+- **tb_pendukung** (Wilayah, Aktivitas = jenis unit, Kode Unit): KPI, filter chip Wilayah & Jenis, chart stacked per wilayah, komposisi jenis, matriks jenis × wilayah, daftar unit dengan pencarian.
+- **tb_aktwilayah** (Wilayah, Aktivitas, Kode, Volume liter): tangki per wilayah & aktivitas, rata-rata volume (grouped bar), matriks aktivitas × wilayah (jumlah · rata-rata), daftar tangki.
+- Pemeriksaan kualitas: kode duplikat (peringatan), kode placeholder `…0000` (info), awalan kode yang lazim dipakai jenis lain (info), volume jauh di bawah median aktivitas (info).
+- Overview: KPI *Unit Pendukung* dan kartu *Resume Unit Pendukung*.
+
 ## Pemeriksaan kualitas data (validasi otomatis saat sync)
 
 Setiap sinkronisasi, semua kolom angka & tanggal diperiksa. Bila ada nilai yang menyimpang, tombol **⚠️ N peringatan data** muncul di header, toast pemberitahuan tampil, dan sel terkait disorot kuning/merah di tabel (arahkan kursor untuk melihat alasannya).

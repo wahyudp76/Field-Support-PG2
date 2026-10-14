@@ -22,7 +22,10 @@ window.APP_CONFIG = {
     sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
     mesin:     { name: 'Mesin',            endHeader: null       }, // berhenti di header kosong pertama
     irrigator: { name: 'Irrigator',        endHeader: 'Status'   },
-    pipa:      { name: 'Pipa',             endHeader: 'Grand Total' } // matriks ringkasan: Placement × jenis × kondisi (satuan: batang)
+    pipa:      { name: 'Pipa',             endHeader: 'Grand Total' }, // matriks ringkasan: Placement × jenis × kondisi (satuan: batang)
+    // Sheet "Unit Pendukung" berisi 2 tabel berdampingan → dibaca sebagai 2 key (block = regex header penanda blok)
+    pendukung: { name: 'Unit Pendukung',   endHeader: null, block: '^kode\\s*unit$' },  // tb_pendukung: Wilayah, Aktivitas(jenis unit), Kode Unit
+    aktwil:    { name: 'Unit Pendukung',   endHeader: null, block: '^volume' }           // tb_aktwilayah: No, Wilayah, Aktivitas, Kode, Volume
   },
 
   // Kolom non-komponen (dipakai untuk menghitung kondisi A/B/C keseluruhan unit)
