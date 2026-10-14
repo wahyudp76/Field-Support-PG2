@@ -360,7 +360,10 @@
       if (c.custom === 'components') { drawChart(k + '-' + c.id, 'hbar', componentStats(k, rows), 10); return; }
       const key = altKey(headers, c.key);
       if (!key) { noChart(k + '-' + c.id, c.key); return; }
-      let e = count(rows, key).filter(x => x[0] !== '(kosong)');
+      const all = count(rows, key), blank = all.find(x => x[0] === '(kosong)');
+      let e = all.filter(x => x[0] !== '(kosong)');
+      const note = $(k + '-' + c.id)?.closest('.card')?.querySelector('h3');
+      if (note) { let sp = note.querySelector('.blank-note'); if (blank && e.length) { if (!sp) { sp = document.createElement('span'); sp.className = 'blank-note'; note.appendChild(sp); } sp.textContent = fmt(blank[1]) + ' belum diisi'; sp.title = 'Baris dengan kolom "' + key + '" kosong tidak ditampilkan di chart'; } else if (sp) sp.remove(); }
       if (c.type === 'line') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
       else if (c.type === 'bar') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'id', { numeric: true }));
       drawChart(k + '-' + c.id, c.type, e, c.type === 'line' ? 120 : (c.limit || 12), c.colors);
@@ -580,7 +583,14 @@
   let ISSUES = [], lastIssueSig = '';
   function updateIssues() {
     ISSUES = [];
-    Object.keys(CONFIG).forEach(k => { (RAW[k].issues || []).forEach(x => ISSUES.push({ ...x, key: k })); });
+    Object.keys(CONFIG).forEach(k => {
+      (RAW[k].issues || []).forEach(x => ISSUES.push({ ...x, key: k }));
+      // header kolom yang dipakai filter/chart/KPI tidak ditemukan → peringatan terlihat (bukan hanya console)
+      if (RAW[k].headers && RAW[k].headers.length) {
+        const need = new Set([...(CONFIG[k].filters || []), ...(CONFIG[k].charts || []).filter(c => c.key).map(c => c.key)]);
+        need.forEach(f => { if (!altKey(RAW[k].headers, f)) ISSUES.push({ key: k, sheet: RAW[k].name, row: 1, col: f, value: '(header tidak ada)', level: 'warn', reason: 'Kolom "' + f + '" tidak ditemukan di baris header sheet — filter/chart terkait kosong', suggest: 'Kembalikan nama header menjadi "' + f + '" atau tambahkan sinonimnya di config.js' }); });
+      }
+    });
     const order = { error: 0, warn: 1, info: 2 };
     ISSUES.sort((a, b) => order[a.level] - order[b.level] || a.sheet.localeCompare(b.sheet) || a.row - b.row);
     const important = ISSUES.filter(x => x.level !== 'info');

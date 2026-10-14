@@ -82,6 +82,8 @@ Panel peringatan menampilkan **sheet, nomor baris, kode, kolom, nilai terinput, 
 - **Sinonim header** (`assets/js/config.js → synonyms`): mis. `Siram`↔`Terpasang`, `HP`↔`Power`, `Divisi`↔`Asal Mesin`. Jika header diganti nama, dashboard tetap bekerja; kolom yang benar-benar tidak ditemukan dicatat di console (`[Dashboard] Kolom tidak ditemukan`).
 - **Gagal sinkron** (offline / Google tidak dapat diakses): data terakhir tetap ditampilkan, indikator merah "Offline — data terakhir".
 - **Buka instan**: data sinkron terakhir disimpan di browser (localStorage, maks 7 hari) dan ditampilkan seketika saat dashboard dibuka, lalu disinkronkan ulang di latar belakang.
+- Chart yang mengabaikan baris kosong menampilkan badge *n belum diisi* agar total batang vs KPI tetap transparan.
+- Header kolom yang dipakai filter/chart tetapi tidak ditemukan di sheet dilaporkan sebagai peringatan di panel info (bukan hanya console).
 - Unit tanpa penilaian komponen sama sekali tidak dihitung sebagai Kondisi A (ditandai *Belum ada penilaian* di panel info).
 
 ## Kustomisasi
