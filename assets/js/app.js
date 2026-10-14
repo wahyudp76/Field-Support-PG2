@@ -113,6 +113,7 @@
         'Komponen Bermasalah': () => 'chip-red'
       }
     },
+    pipa: { title: 'Inventaris Pipa', icon: '🔩', custom: 'pipa', filters: [], kpis: [], charts: [] },
     irrigator: {
       title: 'Inventaris Irrigator', icon: '💦',
       freezeUntil: 'WILAYAH',
@@ -224,6 +225,7 @@
   function buildView(k) {
     const cfg = CONFIG[k], data = RAW[k], el = $('view-' + k);
     if (data.error) { el.innerHTML = `<div class="alert">⚠️ Sheet "<b>${esc(data.name)}</b>" gagal dimuat: ${esc(data.error)}</div>`; return; }
+    if (cfg.custom === 'pipa') return buildPipa();
     // hancurkan chart lama milik tab ini (canvas akan dibuat ulang)
     Object.keys(charts).forEach(id => { if (id.startsWith(k + '-')) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; } });
     const filters = [...new Set(cfg.filters.map(f => altKey(data.headers, f)).filter(Boolean))];
@@ -344,6 +346,7 @@
   function renderView(k) {
     if (!RAW[k] || RAW[k].error || !$(k + '-kpis')) return;
     dirty[k] = false;
+    if (CONFIG[k].custom === 'pipa') return renderPipa();
     const cfg = CONFIG[k], rows = filtered(k), s = state[k], headers = RAW[k].headers;
 
     $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div></div>`).join('');
@@ -526,7 +529,7 @@
       data: { labels, datasets: [dataset] },
       plugins: isPie ? [centerText] : isBar ? [barValues] : [],
       options: {
-        responsive: true, maintainAspectRatio: false, animation: { duration: 550, easing: 'easeOutQuart' },
+        responsive: true, maintainAspectRatio: false, locale: 'id-ID', animation: { duration: 550, easing: 'easeOutQuart' },
         indexAxis: type === 'hbar' ? 'y' : 'x',
         cutout: isPie ? '64%' : undefined,
         layout: { padding: isPie ? 6 : type === 'hbar' ? { right: 36 } : { top: 18 } },
@@ -562,6 +565,7 @@
       { l: 'Total Mesin', v: fmt(m.length), i: '⚙️', c: '#ec4899', t: 'mesin' },
       { l: 'Total Irrigator', v: fmt(ir.length), i: '💦', c: '#06b6d4', t: 'irrigator' },
       { l: 'Volume Air Real (m³)', v: fmt(sum(s, 'Volume Real Ukur (Overflow Terbuka)')), i: '📏', c: '#6366f1', t: 'sumber' },
+      { l: 'Total Pipa (batang)', v: fmt(pipaModel().grand), i: '🔩', c: '#f97316', t: 'pipa' },
     ];
     $('ov-kpis').innerHTML = k.map(x => `<div class="kpi link" style="--c:${x.c}" data-t="${x.t}" title="Buka tab"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${x.l}</div></div>`).join('');
     requestAnimationFrame(() => {
@@ -576,8 +580,203 @@
     const lbl = { '(kosong)': 'Belum dinilai', A: 'Kondisi A — Baik', B: 'Kondisi B — Perlu Perhatian', C: 'Kondisi C — Perlu Perbaikan' };
     const li = (label, arr) => `<li class="sub"><b>${label}</b></li>` + count(arr, 'Kondisi').sort().map(([c, n]) => `<li><span class="chip ${c === 'A' ? 'chip-green' : c === 'B' ? 'chip-amber' : 'chip-red'}">${c}</span><span style="flex:1;margin-left:10px">${lbl[c] || c}</span><b>${n}</b></li>`).join('');
     $('ov-kondisi').innerHTML = li('⚙️ Mesin', m) + li('💦 Irrigator', ir);
+    renderPipaResume();
   }
   $('ov-kpis').addEventListener('click', e => { const c = e.target.closest('[data-t]'); if (c) switchTab(c.dataset.t); });
+
+
+  /* ---------- PIPA (matriks ringkasan: Placement × jenis × kondisi) ---------- */
+  const PIPA_COND = ['Good', 'Average', 'Poor', 'Reject'];
+  const PIPA_COND_C = { Good: '#22c55e', Average: '#f59e0b', Poor: '#f97316', Reject: '#ef4444' };
+  const PIPA_COND_ID = { Good: 'Baik', Average: 'Cukup', Poor: 'Buruk', Reject: 'Afkir' };
+  const pipaState = { place: new Set(), jenis: new Set() };
+  let pipaCache = null;
+
+  // Bangun model dari header secara otomatis:
+  //  "Total <Jenis>" → daftar jenis; "<Jenis> <Good|Average|Poor|Reject>" → kondisi; "<Jenis> <lainnya>" → kategori (mis. 100M, >50M)
+  function pipaModel(force) {
+    if (pipaCache && !force && pipaCache.src === RAW.pipa) return pipaCache;
+    const sh = RAW.pipa, H = (sh && sh.headers) || [], rows = (sh && !sh.error && sh.rows) || [];
+    const norm = h => h.replace(/\s+/g, ' ').trim();
+    const placeCol = H.find(h => /placement|penempatan|lokasi|wilayah/i.test(h)) || H[0];
+    const grandCol = H.find(h => /^grand\s*total/i.test(norm(h)));
+    const jenis = [];
+    H.forEach(h => { const m = norm(h).match(/^total\s+(.+)$/i); if (m) jenis.push({ name: m[1].trim(), totalCol: h, cols: [] }); });
+    H.forEach(h => {
+      if (h === placeCol || h === grandCol || jenis.some(j => j.totalCol === h)) return;
+      const n = norm(h); const j = jenis.filter(j => n.toLowerCase().startsWith(j.name.toLowerCase() + ' ')).sort((a, b) => b.name.length - a.name.length)[0];
+      if (!j) return;
+      const sub = n.slice(j.name.length).trim();
+      const cond = PIPA_COND.find(c => c.toLowerCase() === sub.toLowerCase());
+      j.cols.push({ col: h, sub: cond || sub, cond: cond || null });
+    });
+    const places = rows.map(r => {
+      const o = { name: String(r[placeCol] || '').trim() || '(kosong)', row: r, jenis: {}, total: 0, totalSheet: numv(r, grandCol), cond: { Good: 0, Average: 0, Poor: 0, Reject: 0 }, graded: 0 };
+      jenis.forEach(j => {
+        const parts = {}; let t = 0;
+        j.cols.forEach(c => { const v = numv(r, c.col); const n = isNaN(v) ? 0 : v; parts[c.sub] = n; t += n; if (c.cond) { o.cond[c.cond] += n; o.graded += n; } });
+        o.jenis[j.name] = { parts, total: t, totalSheet: numv(r, j.totalCol) };
+        o.total += t;
+      });
+      return o;
+    });
+    const byJenis = {}; jenis.forEach(j => { byJenis[j.name] = { total: 0, parts: {} }; j.cols.forEach(c => byJenis[j.name].parts[c.sub] = 0); });
+    const cond = { Good: 0, Average: 0, Poor: 0, Reject: 0 }; let grand = 0, graded = 0;
+    places.forEach(p => { grand += p.total; graded += p.graded; PIPA_COND.forEach(c => cond[c] += p.cond[c]); jenis.forEach(j => { const x = p.jenis[j.name]; byJenis[j.name].total += x.total; Object.keys(x.parts).forEach(k => byJenis[j.name].parts[k] += x.parts[k]); }); });
+    const gradedJenis = jenis.filter(j => j.cols.some(c => c.cond)).map(j => j.name), ungradedJenis = jenis.filter(j => !j.cols.some(c => c.cond)).map(j => j.name);
+    // Cek silang total di sheet vs penjumlahan komponen → peringatan kualitas data
+    const issues = [];
+    places.forEach(p => {
+      jenis.forEach(j => { const x = p.jenis[j.name]; if (!isNaN(x.totalSheet) && x.totalSheet !== x.total) issues.push({ row: p.row._i + 2, col: j.totalCol, value: p.row[j.totalCol], level: 'warn', reason: `Total ${j.name} di sheet (${fmt(x.totalSheet)}) ≠ jumlah komponen (${fmt(x.total)}) pada ${p.name}`, suggest: 'Periksa rumus/isian kolom komponen; dashboard memakai jumlah komponen' }); });
+      if (grandCol && !isNaN(p.totalSheet) && p.totalSheet !== p.total) issues.push({ row: p.row._i + 2, col: grandCol, value: p.row[grandCol], level: 'warn', reason: `Grand Total di sheet (${fmt(p.totalSheet)}) ≠ jumlah komponen (${fmt(p.total)}) pada ${p.name}`, suggest: 'Periksa rumus Grand Total; dashboard memakai jumlah komponen' });
+    });
+    if (sh && !sh.error) { sh.issues = (sh.issues || []).filter(x => !x._calc); issues.forEach(x => { x._calc = true; x.id = x.row; x.sheet = sh.name; sh.issues.push(x); }); }
+    pipaCache = { src: sh, placeCol, grandCol, jenis, places, byJenis, cond, grand, graded, gradedJenis, ungradedJenis, ok: !!(sh && !sh.error && rows.length && jenis.length) };
+    return pipaCache;
+  }
+  const pipaPct = (n, d) => d ? (n / d * 100).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%' : '–';
+
+  function buildPipa() {
+    const el = $('view-pipa');
+    pipaModel(true); // hitung model + cek silang total SEBELUM panel peringatan diperbarui
+    Object.keys(charts).forEach(id => { if (id.startsWith('pipa-')) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; } });
+    el.innerHTML = `
+      <div class="kpis" id="pipa-kpis"></div>
+      <div class="filters" id="pipa-filters"></div>
+      <div class="active-filters" id="pipa-af"></div>
+      <div class="charts">
+        <div class="card"><h3>Pipa per Penempatan &amp; Jenis</h3><div class="chart-box"><canvas id="pipa-c1"></canvas></div></div>
+        <div class="card"><h3>Komposisi Jenis Pipa</h3><div class="chart-box"><canvas id="pipa-c2"></canvas></div></div>
+        <div class="card"><h3>Kondisi Pipa <span class="blank-note" id="pipa-c3-note"></span></h3><div class="chart-box"><canvas id="pipa-c3"></canvas></div></div>
+        <div class="card"><h3>Kondisi per Penempatan <span class="blank-note" id="pipa-c4-note"></span></h3><div class="chart-box"><canvas id="pipa-c4"></canvas></div></div>
+      </div>
+      <div class="tbl-head"><h3>🔩 Matriks Inventaris Pipa <span class="blank-note">satuan: batang</span></h3><div class="tbl-tools"><span class="info" id="pipa-info"></span></div></div>
+      <div class="tbl-wrap"><table class="pipa-tbl"><thead id="pipa-thead"></thead><tbody id="pipa-tbody"></tbody><tfoot id="pipa-tfoot"></tfoot></table></div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="card"><h3>Analisa per Jenis Pipa</h3><div id="pipa-jenis"></div></div>
+        <div class="card"><h3>Analisa per Penempatan</h3><div id="pipa-place"></div></div>
+      </div>`;
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-pf]'); if (!b) return;
+      if (b.dataset.pf === 'all') { pipaState.place.clear(); pipaState.jenis.clear(); return renderPipa(); }
+      const set = pipaState[b.dataset.pf], v = b.dataset.v;
+      if (v === '') set.clear(); else set.has(v) ? set.delete(v) : set.add(v);
+      renderPipa();
+    });
+  }
+
+  function pipaView() {
+    const M = pipaModel();
+    const places = M.places.filter(p => !pipaState.place.size || pipaState.place.has(p.name));
+    const jenis = M.jenis.filter(j => !pipaState.jenis.size || pipaState.jenis.has(j.name));
+    const cond = { Good: 0, Average: 0, Poor: 0, Reject: 0 }; let total = 0, graded = 0; const byJ = {}, byP = [];
+    jenis.forEach(j => byJ[j.name] = { total: 0, parts: {}, cond: { Good: 0, Average: 0, Poor: 0, Reject: 0 }, graded: 0 });
+    places.forEach(p => {
+      const o = { name: p.name, total: 0, jenis: {}, cond: { Good: 0, Average: 0, Poor: 0, Reject: 0 }, graded: 0 };
+      jenis.forEach(j => {
+        const x = p.jenis[j.name]; o.jenis[j.name] = x.total; o.total += x.total; byJ[j.name].total += x.total;
+        j.cols.forEach(c => { const n = x.parts[c.sub] || 0; byJ[j.name].parts[c.sub] = (byJ[j.name].parts[c.sub] || 0) + n; if (c.cond) { o.cond[c.cond] += n; o.graded += n; byJ[j.name].cond[c.cond] += n; byJ[j.name].graded += n; cond[c.cond] += n; graded += n; } });
+      });
+      total += o.total; byP.push(o);
+    });
+    return { M, places, jenis, cond, total, graded, byJ, byP };
+  }
+
+  function renderPipa() {
+    const V = pipaView(), M = V.M; dirty.pipa = false;
+    if (!M.ok) { $('pipa-kpis').innerHTML = '<div class="alert">⚠️ Struktur sheet "Pipa" tidak dikenali (butuh kolom Placement, "Total &lt;Jenis&gt;" dan "&lt;Jenis&gt; Good/Average/Poor/Reject").</div>'; return; }
+    const bad = V.cond.Poor + V.cond.Reject;
+    const kp = [
+      { l: 'Total Pipa', v: fmt(V.total), i: '🔩', c: '#f97316' },
+      ...V.jenis.map((j, i) => ({ l: j.name, v: fmt(V.byJ[j.name].total), i: ['🧲', '🧵', '♻️'][i] || '📦', c: PALETTE[(i + 1) % PALETTE.length] })),
+      { l: 'Kondisi Baik (Good)', v: fmt(V.cond.Good), s: pipaPct(V.cond.Good, V.graded) + ' dari yang dinilai', i: '🟢', c: '#22c55e' },
+      { l: 'Cukup (Average)', v: fmt(V.cond.Average), s: pipaPct(V.cond.Average, V.graded), i: '🟡', c: '#f59e0b' },
+      { l: 'Buruk + Afkir (Poor/Reject)', v: fmt(bad), s: pipaPct(bad, V.graded), i: '🔴', c: '#ef4444' },
+      { l: 'Penempatan', v: fmt(V.places.length), i: '📍', c: '#38bdf8' },
+    ];
+    $('pipa-kpis').innerHTML = kp.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${esc(x.l)}${x.s ? `<span class="kpi-sub">${esc(x.s)}</span>` : ''}</div></div>`).join('');
+    const chipRow = (label, key, items) => `<div class="fgroup"><label>${label}</label><div class="pchips">${[['', 'Semua']].concat(items.map(x => [x, x])).map(([v, t]) => `<button type="button" class="pchip ${(v === '' ? !pipaState[key].size : pipaState[key].has(v)) ? 'on' : ''}" data-pf="${key}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div></div>`;
+    $('pipa-filters').innerHTML = chipRow('📍 Penempatan', 'place', M.places.map(p => p.name)) + chipRow('🔩 Jenis Pipa', 'jenis', M.jenis.map(j => j.name));
+    $('pipa-af').innerHTML = (pipaState.place.size || pipaState.jenis.size) ? `<span class="chip chip-blue">Filter aktif: ${[...pipaState.place, ...pipaState.jenis].map(esc).join(', ')}</span> <button class="btn btn-outline btn-sm" data-pf="all" data-v="">✕ Reset</button>` : '';
+    $('pipa-info').textContent = `${fmt(V.places.length)} penempatan · ${fmt(V.jenis.length)} jenis · ${fmt(V.total)} batang`;
+
+    requestAnimationFrame(() => {
+      drawStacked('pipa-c1', V.byP.map(p => p.name), V.jenis.map((j, i) => ({ label: j.name, data: V.byP.map(p => p.jenis[j.name]), backgroundColor: PALETTE[(i + 1) % PALETTE.length] })));
+      drawChart('pipa-c2', 'doughnut', V.jenis.map(j => [j.name, V.byJ[j.name].total]).filter(x => x[1] > 0));
+      drawChart('pipa-c3', 'doughnut', PIPA_COND.map(c => [c + ' — ' + PIPA_COND_ID[c], V.cond[c]]).filter(x => x[1] > 0), 12, Object.fromEntries(PIPA_COND.map(c => [c + ' — ' + PIPA_COND_ID[c], PIPA_COND_C[c]])));
+      drawStacked('pipa-c4', V.byP.map(p => p.name), PIPA_COND.map(c => ({ label: c, data: V.byP.map(p => p.cond[c]), backgroundColor: PIPA_COND_C[c] })));
+    });
+    const ung = M.ungradedJenis.filter(n => V.jenis.some(j => j.name === n));
+    const note = ung.length ? `${ung.join(', ')} tidak dinilai kondisi` : ''; $('pipa-c3-note').textContent = note; $('pipa-c4-note').textContent = note;
+
+    // matriks (seperti sheet) + baris total (dihitung) + tanda bila total sheet berbeda
+    const cols = []; V.jenis.forEach(j => { j.cols.forEach(c => cols.push({ j, c })); cols.push({ j, total: true }); });
+    $('pipa-thead').innerHTML = `<tr><th rowspan="2">${esc(M.placeCol)}</th>${V.jenis.map(j => `<th colspan="${j.cols.length + 1}" class="grp">${esc(j.name)}</th>`).join('')}<th rowspan="2">Grand Total</th></tr><tr>${cols.map(x => x.total ? `<th class="tot">Total</th>` : `<th>${esc(x.c.sub)}</th>`).join('')}</tr>`;
+    const cell = (n, cls = '') => `<td class="num ${cls}">${n ? fmt(n) : '<span class="dim">–</span>'}</td>`;
+    const mism = (a, b) => !isNaN(b) && a !== b ? ` title="Di sheet tertulis ${fmt(b)}" class="num tot mismatch"` : ' class="num tot"';
+    $('pipa-tbody').innerHTML = V.places.map(p => `<tr><td><b>${esc(p.name)}</b></td>${cols.map(x => x.total ? `<td${mism(p.jenis[x.j.name].total, p.jenis[x.j.name].totalSheet)}>${fmt(p.jenis[x.j.name].total)}</td>` : cell(p.jenis[x.j.name].parts[x.c.sub], x.c.cond ? 'cond-' + x.c.cond : '')).join('')}<td${mism(V.jenis.length === M.jenis.length ? p.total : NaN, p.totalSheet)}><b>${fmt(V.jenis.reduce((a, j) => a + p.jenis[j.name].total, 0))}</b></td></tr>`).join('');
+    $('pipa-tfoot').innerHTML = `<tr><td><b>Total</b></td>${cols.map(x => x.total ? `<td class="num tot"><b>${fmt(V.byJ[x.j.name].total)}</b></td>` : cell(V.byJ[x.j.name].parts[x.c.sub])).join('')}<td class="num tot"><b>${fmt(V.total)}</b></td></tr>`;
+
+    // analisa per jenis
+    const bar = (parts, colors) => `<div class="pbar">${parts.filter(p => p[1] > 0).map(p => `<span style="width:${p[1] / Math.max(1, parts.reduce((a, b) => a + b[1], 0)) * 100}%;background:${colors[p[0]] || '#64748b'}" title="${esc(p[0])}: ${fmt(p[1])}"></span>`).join('')}</div>`;
+    $('pipa-jenis').innerHTML = V.jenis.map(j => { const b = V.byJ[j.name], gr = j.cols.some(c => c.cond); return `<div class="prow"><div class="prow-h"><b>${esc(j.name)}</b><span>${fmt(b.total)} batang · ${pipaPct(b.total, V.total)} dari total</span></div>${bar(Object.entries(b.parts), gr ? PIPA_COND_C : Object.fromEntries(Object.keys(b.parts).map((k, i) => [k, PALETTE[(i + 5) % PALETTE.length]])))}<div class="plegend">${Object.entries(b.parts).map(([k, n]) => `<span><i style="background:${gr ? PIPA_COND_C[k] : PALETTE[(Object.keys(b.parts).indexOf(k) + 5) % PALETTE.length]}"></i>${esc(k)}${PIPA_COND_ID[k] ? ' (' + PIPA_COND_ID[k] + ')' : ''}: <b>${fmt(n)}</b> ${b.total ? '· ' + pipaPct(n, b.total) : ''}</span>`).join('')}</div>${gr ? `<div class="pnote">${b.cond.Poor + b.cond.Reject ? `⚠️ ${fmt(b.cond.Poor + b.cond.Reject)} batang (${pipaPct(b.cond.Poor + b.cond.Reject, b.graded)}) kondisi Poor/Reject — prioritas penggantian` : '✅ Tidak ada pipa Poor/Reject'}</div>` : `<div class="pnote">ℹ️ Kategori ukuran, tidak dinilai kondisi</div>`}</div>`; }).join('');
+    // analisa per penempatan
+    const mx = Math.max(1, ...V.byP.map(p => p.total));
+    $('pipa-place').innerHTML = V.byP.slice().sort((a, b) => b.total - a.total).map(p => `<div class="prow"><div class="prow-h"><b>${esc(p.name)}</b><span>${fmt(p.total)} batang · ${pipaPct(p.total, V.total)}</span></div><div class="pbar one"><span style="width:${p.total / mx * 100}%;background:#f97316"></span></div><div class="plegend">${V.jenis.map(j => `<span>${esc(j.name)}: <b>${fmt(p.jenis[j.name])}</b></span>`).join('')}</div><div class="pnote">${p.graded ? `Baik ${pipaPct(p.cond.Good, p.graded)} · Cukup ${pipaPct(p.cond.Average, p.graded)} · Poor/Reject <b>${fmt(p.cond.Poor + p.cond.Reject)}</b> (${pipaPct(p.cond.Poor + p.cond.Reject, p.graded)})` : ''}</div></div>`).join('');
+  }
+
+  function renderPipaResume() {
+    const el = $('ov-pipa'); if (!el) return;
+    const M = pipaModel();
+    if (!M.ok) { el.innerHTML = `<ul class="mini-list"><li class="empty">${RAW.pipa && RAW.pipa.error ? 'Sheet Pipa gagal dimuat' : 'Belum ada data pipa'}</li></ul>`; return; }
+    const bad = M.cond.Poor + M.cond.Reject;
+    el.innerHTML = `
+      <div class="ov-pipa-top"><div><div class="big">${fmt(M.grand)}</div><div class="lbl">Total batang · ${M.places.length} penempatan</div></div>
+        <div class="ov-pipa-cond">${PIPA_COND.map(c => `<span><i style="background:${PIPA_COND_C[c]}"></i>${PIPA_COND_ID[c]} <b>${fmt(M.cond[c])}</b></span>`).join('')}</div></div>
+      <div class="pbar">${PIPA_COND.map(c => `<span style="width:${M.graded ? M.cond[c] / M.graded * 100 : 0}%;background:${PIPA_COND_C[c]}" title="${c}: ${fmt(M.cond[c])}"></span>`).join('')}</div>
+      <div class="pnote" style="margin:4px 0 10px">${bad ? `⚠️ <b>${fmt(bad)}</b> batang (${pipaPct(bad, M.graded)} dari yang dinilai) kondisi Poor/Reject` : '✅ Tidak ada pipa Poor/Reject'}${M.ungradedJenis.length ? ` · ${M.ungradedJenis.join(', ')} tidak dinilai` : ''}</div>
+      <div class="ov-pipa-grid"><div class="chart-box" style="height:220px"><canvas id="ov-pipa-chart"></canvas></div><div style="overflow:auto"><table class="mini-tbl"><thead><tr><th>${esc(M.placeCol)}</th>${M.jenis.map(j => `<th class="num">${esc(j.name)}</th>`).join('')}<th class="num">Total</th><th class="num">Poor/Rej.</th></tr></thead>
+      <tbody>${M.places.map(p => `<tr><td><b>${esc(p.name)}</b></td>${M.jenis.map(j => `<td class="num">${fmt(p.jenis[j.name].total)}</td>`).join('')}<td class="num"><b>${fmt(p.total)}</b></td><td class="num ${p.cond.Poor + p.cond.Reject ? 'warn' : ''}">${fmt(p.cond.Poor + p.cond.Reject)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td><b>Total</b></td>${M.jenis.map(j => `<td class="num"><b>${fmt(M.byJenis[j.name].total)}</b></td>`).join('')}<td class="num"><b>${fmt(M.grand)}</b></td><td class="num"><b>${fmt(bad)}</b></td></tr></tfoot></table></div></div>
+      <div style="text-align:right;margin-top:8px"><a href="#pipa" class="btn btn-outline btn-sm" onclick="switchTab('pipa');return false;">Buka analisa Pipa →</a></div>`;
+    requestAnimationFrame(() => drawStacked('ov-pipa-chart', M.places.map(p => p.name), M.jenis.map((j, i) => ({ label: j.name, data: M.places.map(p => p.jenis[j.name].total), backgroundColor: PALETTE[(i + 1) % PALETTE.length] }))));
+  }
+
+  // Chart batang bertumpuk (stacked) dengan total di atas tiap batang
+  const stackTotals = {
+    id: 'stackTotals',
+    afterDatasetsDraw(chart) {
+      const g = chart.ctx, tot = chart.data.labels.map((_, i) => chart.data.datasets.reduce((a, d, di) => a + (chart.isDatasetVisible(di) ? (+d.data[i] || 0) : 0), 0));
+      g.save(); g.font = '700 11px Inter, system-ui, sans-serif'; g.fillStyle = themeColors().text; g.textAlign = 'center'; g.textBaseline = 'bottom';
+      const last = [...chart.data.datasets.keys()].reverse().find(di => chart.isDatasetVisible(di));
+      if (last === undefined) { g.restore(); return; }
+      chart.getDatasetMeta(last).data.forEach((bar, i) => { if (!tot[i]) return; let y = bar.y; chart.data.datasets.forEach((d, di) => { if (chart.isDatasetVisible(di)) y = Math.min(y, chart.getDatasetMeta(di).data[i].y); }); g.fillText(fmt(tot[i]), bar.x, y - 4); });
+      g.restore();
+    }
+  };
+  function drawStacked(id, labels, datasets) {
+    const ctx = $(id); if (!ctx || typeof Chart === 'undefined') return;
+    const tc = themeColors(); datasets = datasets.map(d => ({ ...d, borderRadius: 4, borderSkipped: false, maxBarThickness: 54 }));
+    let ex = charts[id];
+    if (ex && (ex.canvas !== ctx || !ctx.isConnected || ex._t !== 'stacked')) { try { ex.destroy(); } catch (e) {} delete charts[id]; ex = null; }
+    if (ex) { ex.data.labels = labels; ex.data.datasets = datasets; ex.options.plugins.legend.labels.color = tc.text; ex.options.scales.x.ticks.color = ex.options.scales.y.ticks.color = tc.text; ex.options.scales.y.grid.color = tc.grid; ex.update(); return; }
+    const chart = new Chart(ctx, {
+      type: 'bar', data: { labels, datasets }, plugins: [stackTotals],
+      options: {
+        responsive: true, maintainAspectRatio: false, locale: 'id-ID', animation: { duration: 550, easing: 'easeOutQuart' }, layout: { padding: { top: 18 } },
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { color: tc.text, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 10, font: { size: 11, weight: '600' } } },
+          tooltip: { backgroundColor: 'rgba(15,23,42,.92)', padding: 10, cornerRadius: 10, titleFont: { weight: '700' }, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} batang`, footer: it => 'Total: ' + fmt(it.reduce((a, c) => a + c.parsed.y, 0)) + ' batang' } }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: tc.text, font: { size: 11 } }, grid: { display: false }, border: { display: false } },
+          y: { stacked: true, beginAtZero: true, grace: '8%', ticks: { color: tc.text, precision: 0, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }
+        }
+      }
+    });
+    chart._t = 'stacked'; charts[id] = chart;
+  }
 
   /* ---------- Peringatan kualitas data ---------- */
   let ISSUES = [], lastIssueSig = '';

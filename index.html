@@ -26,7 +26,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="assets/css/style.css?v=12">
+<link rel="stylesheet" href="assets/css/style.css?v=13">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
 </head>
 <body>
@@ -55,6 +55,7 @@
   <div class="tab" data-tab="sumber">🌊 Sumber Air <span class="badge" id="badge-sumber">0</span></div>
   <div class="tab" data-tab="mesin">⚙️ Mesin <span class="badge" id="badge-mesin">0</span></div>
   <div class="tab" data-tab="irrigator">💦 Irrigator <span class="badge" id="badge-irrigator">0</span></div>
+  <div class="tab" data-tab="pipa">🔩 Pipa <span class="badge" id="badge-pipa">0</span></div>
 </nav>
 
 <main>
@@ -70,12 +71,14 @@
       <div class="grid-2">
         <div class="card"><h3>Ranking Wilayah — Unit Terpasang</h3><ul class="mini-list" id="ov-wil"></ul></div>
         <div class="card"><h3>Ringkasan Kondisi Peralatan</h3><ul class="mini-list" id="ov-kondisi"></ul></div>
+        <div class="card ov-pipa-card"><h3>Resume Inventaris Pipa <span class="blank-note" id="ov-pipa-unit">satuan: batang</span></h3><div id="ov-pipa"></div></div>
       </div>
     </section>
     <section class="view" id="view-detail"></section>
     <section class="view" id="view-sumber"></section>
     <section class="view" id="view-mesin"></section>
     <section class="view" id="view-irrigator"></section>
+    <section class="view" id="view-pipa"></section>
   </div>
   <footer>
     Dashboard Field Support Irigasi PG 2 · Data: <a id="sheetLink" href="#" target="_blank" rel="noopener">Google Spreadsheet</a> ·
@@ -107,9 +110,9 @@
   </div>
 </div>
 
-<script src="assets/js/config.js?v=12" defer></script>
-<script src="assets/js/data.js?v=12" defer></script>
-<script src="assets/js/app.js?v=12" defer></script>
+<script src="assets/js/config.js?v=13" defer></script>
+<script src="assets/js/data.js?v=13" defer></script>
+<script src="assets/js/app.js?v=13" defer></script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

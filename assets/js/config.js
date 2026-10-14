@@ -21,7 +21,8 @@ window.APP_CONFIG = {
     detail:    { name: 'Detail Terpasang', endHeader: 'Kode Air' },
     sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
     mesin:     { name: 'Mesin',            endHeader: null       }, // berhenti di header kosong pertama
-    irrigator: { name: 'Irrigator',        endHeader: 'Status'   }
+    irrigator: { name: 'Irrigator',        endHeader: 'Status'   },
+    pipa:      { name: 'Pipa',             endHeader: 'Grand Total' } // matriks ringkasan: Placement × jenis × kondisi (satuan: batang)
   },
 
   // Kolom non-komponen (dipakai untuk menghitung kondisi A/B/C keseluruhan unit)

@@ -60,6 +60,15 @@ Pembacaan kolom berhenti pada header kosong pertama atau kolom terakhir yang dit
 2. **Source:** pilih **GitHub Actions**.
 3. Tunggu workflow *Deploy GitHub Pages* selesai (tab **Actions**), lalu buka https://wahyudp76.github.io/Field-Support-PG2/
 
+## Tab Pipa (inventaris pipa)
+
+Sheet **Pipa** berbentuk matriks ringkasan (bukan daftar per unit): baris = *Placement* (Central PG2 / OP2 / FM4), kolom = jenis pipa × kondisi. Satuan: **batang**.
+
+- Struktur dibaca **otomatis dari header**: `Total <Jenis>` menentukan daftar jenis; `<Jenis> Good/Average/Poor/Reject` dibaca sebagai kondisi; sub-kolom lain (mis. `Ex Irrigator 100M`, `>50M`) dibaca sebagai kategori ukuran. Menambah jenis/penempatan baru di sheet otomatis ikut tampil.
+- Dashboard **menjumlahkan komponen sendiri**; kolom `Total …` dan `Grand Total` di sheet hanya dipakai untuk cek silang — bila berbeda, sel ditandai oranye dan muncul peringatan di panel info.
+- Isi tab: KPI (total, per jenis, Good/Average/Poor+Reject, penempatan), filter chip penempatan & jenis, chart (stacked per penempatan & jenis, komposisi jenis, kondisi, kondisi per penempatan), matriks seperti di sheet + baris total, analisa per jenis dan per penempatan.
+- Overview: KPI *Total Pipa* dan kartu *Resume Inventaris Pipa* (chart + tabel ringkas + persentase Poor/Reject).
+
 ## Pemeriksaan kualitas data (validasi otomatis saat sync)
 
 Setiap sinkronisasi, semua kolom angka & tanggal diperiksa. Bila ada nilai yang menyimpang, tombol **⚠️ N peringatan data** muncul di header, toast pemberitahuan tampil, dan sel terkait disorot kuning/merah di tabel (arahkan kursor untuk melihat alasannya).
