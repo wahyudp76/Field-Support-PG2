@@ -93,6 +93,18 @@ Setiap sinkronisasi, semua kolom angka & tanggal diperiksa. Bila ada nilai yang 
 
 Panel peringatan menampilkan **sheet, nomor baris, kode, kolom, nilai terinput, masalah, dan saran perbaikan**; klik baris untuk melompat ke datanya; bisa diekspor CSV. Nilai **teks** dan **ekstrem** tidak diikutkan dalam total/KPI sampai diperbaiki di spreadsheet; nilai salah pemisah tetap dihitung sesuai maksud penulisnya.
 
+### Pemeriksaan relasi titik irigasi (Detail Terpasang ↔ Mesin ↔ Irrigator ↔ Sumber Air)
+
+Dijalankan setiap sinkronisasi; hasilnya masuk panel ⚠️ dan sel terkait disorot di tabel.
+
+| Level | Kondisi |
+|---|---|
+| **Error** | Satu Kode Engine dipakai di >1 titik irigasi · satu Kode Irigator dipakai di >1 titik |
+| Peringatan | Titik tanpa engine / tanpa irrigator / tanpa sumber air (Sumber Air & Kode Air kosong) · Kode Air kosong padahal jenis terisi (atau sebaliknya) · Kode Engine/Irigator/Air tidak ada di sheet master · engine/irrigator terpasang di titik tetapi status di sheet master bukan "Terpasang" · mesin/irrigator berstatus Terpasang tetapi tidak tercatat di titik manapun |
+| Info | Lokasi yang sama tercatat lebih dari sekali (bisa sah bila memang 2 unit) |
+
+Kode Air yang dipakai lebih dari satu titik **tidak** diperingatkan (satu lebung wajar melayani beberapa titik).
+
 ## Ketahanan terhadap perubahan sheet
 
 - **Kolom komponen A/B/C dideteksi otomatis** (kolom yang seluruh isinya A/B/C) → menambah/menghapus kolom komponen di sheet Mesin/Irrigator tidak perlu ubah kode.

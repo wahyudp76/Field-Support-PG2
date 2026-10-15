@@ -201,6 +201,7 @@
       buildView(k);
       dirty[k] = true;
     });
+    relationalChecks();
     updateIssues();
     renderOverview();
     if (currentTab !== 'overview') renderView(currentTab);
@@ -962,6 +963,54 @@
     chart._t = 'stacked'; charts[id] = chart;
   }
 
+
+  /* ---------- Pemeriksaan relasi antar sheet (titik irigasi ↔ engine ↔ irrigator ↔ sumber air) ---------- */
+  function relationalChecks() {
+    const D = RAW.detail, M = RAW.mesin, I = RAW.irrigator, S = RAW.sumber;
+    const clear = sh => { if (sh && !sh.error) { sh.issues = (sh.issues || []).filter(x => !x._rel); sh.rows.forEach(r => { if (r._flag) { Object.keys(r._flag).forEach(k => { if (r._flag[k]._rel) delete r._flag[k]; }); if (!Object.keys(r._flag).length) r._flag = null; } }); } };
+    [D, M, I, S].forEach(clear);
+    if (!D || D.error || !D.rows.length) return;
+    const h = D.headers, K = n => altKey(h, n) || n;
+    const cLok = K('Lokasi'), cEng = K('Kode Engine'), cIrr = K('Kode Irigator'), cSrc = K('Sumber Air'), cAir = K('Kode Air'), cWil = K('Wil');
+    const add = (sh, r, col, chk) => { const x = { row: r._i + 2, col, value: r[col] || '(kosong)', id: r[cLok] || r[col] || '', sheet: sh.name, _rel: true, _calc: true, ...chk }; sh.issues.push(x); (r._flag || (r._flag = {}))[col] = { ...chk, _rel: true }; };
+    const idLabel = r => (r[cLok] ? 'titik ' + r[cLok] : 'baris ' + (r._i + 2)) + (r[cWil] ? ' (' + r[cWil] + ')' : '');
+    const v = (r, c) => String(r[c] || '').trim();
+    // kunci referensi dari sheet lain
+    const mKey = M && !M.error ? (altKey(M.headers, 'Kode Unit') || 'Kode Unit') : null, mStat = M && !M.error ? (altKey(M.headers, 'Status') || 'Status') : null;
+    const iKey = I && !I.error ? (altKey(I.headers, 'KODE UNIT') || altKey(I.headers, 'Kode Unit') || 'KODE UNIT') : null, iStat = I && !I.error ? (altKey(I.headers, 'Status') || 'Status') : null;
+    const sKeys = S && !S.error ? S.headers.filter(x => /kode/i.test(x)) : [];
+    const mSet = new Map(), iSet = new Map(), sSet = new Set();
+    if (mKey) M.rows.forEach(r => { const k = v(r, mKey); if (k) mSet.set(k, r); });
+    if (iKey) I.rows.forEach(r => { const k = v(r, iKey); if (k) iSet.set(k, r); });
+    if (sKeys.length) S.rows.forEach(r => sKeys.forEach(c => { const k = v(r, c); if (k) sSet.add(k); }));
+    // hitung pemakaian ganda
+    const useEng = new Map(), useIrr = new Map(), useLok = new Map();
+    D.rows.forEach(r => { const e = v(r, cEng), i = v(r, cIrr), l = v(r, cLok); if (e) useEng.set(e, (useEng.get(e) || []).concat(r)); if (i) useIrr.set(i, (useIrr.get(i) || []).concat(r)); if (l) useLok.set(l, (useLok.get(l) || []).concat(r)); });
+    D.rows.forEach(r => {
+      const e = v(r, cEng), i = v(r, cIrr), a = v(r, cAir), src = v(r, cSrc);
+      // kelengkapan titik irigasi
+      if (!e) add(D, r, cEng, { level: 'warn', reason: 'Titik irigasi tanpa engine — ' + idLabel(r), suggest: 'Isi Kode Engine yang terpasang di titik ini' });
+      if (!i) add(D, r, cIrr, { level: 'warn', reason: 'Titik irigasi tanpa irrigator — ' + idLabel(r), suggest: 'Isi Kode Irigator, atau beri keterangan bila memang tanpa irrigator' });
+      if (!a && !src) add(D, r, cAir, { level: 'warn', reason: 'Titik irigasi tanpa sumber air — ' + idLabel(r), suggest: 'Isi Sumber Air dan Kode Air (kode lebung/deep well)' });
+      else if (!a) add(D, r, cAir, { level: 'warn', reason: 'Kode Air kosong padahal Sumber Air terisi (' + src + ') — ' + idLabel(r), suggest: 'Isi Kode Air sesuai sheet Sumber Air' });
+      else if (!src) add(D, r, cSrc, { level: 'warn', reason: 'Jenis Sumber Air kosong padahal Kode Air terisi (' + a + ') — ' + idLabel(r), suggest: 'Isi jenis sumber air' });
+      // pemakaian ganda
+      if (e && useEng.get(e).length > 1) add(D, r, cEng, { level: 'error', reason: 'Engine ' + e + ' dipakai di ' + useEng.get(e).length + ' titik irigasi: ' + useEng.get(e).map(x => x[cLok] || ('baris ' + (x._i + 2))).join(', '), suggest: 'Satu engine hanya boleh terpasang di satu titik — periksa kode yang salah ketik atau baris lama yang belum dihapus' });
+      if (i && useIrr.get(i).length > 1) add(D, r, cIrr, { level: 'error', reason: 'Irrigator ' + i + ' dipakai di ' + useIrr.get(i).length + ' titik irigasi: ' + useIrr.get(i).map(x => x[cLok] || ('baris ' + (x._i + 2))).join(', '), suggest: 'Satu irrigator hanya boleh terpasang di satu titik — periksa kode atau baris ganda' });
+      // referensi silang ke sheet master
+      if (e && mKey && !mSet.has(e)) add(D, r, cEng, { level: 'warn', reason: 'Kode Engine ' + e + ' tidak ditemukan di sheet Mesin — ' + idLabel(r), suggest: 'Periksa ejaan kode atau tambahkan unit ke sheet Mesin' });
+      else if (e && mKey && mStat && v(mSet.get(e), mStat) && !/terpasang/i.test(v(mSet.get(e), mStat))) add(D, r, cEng, { level: 'warn', reason: 'Engine ' + e + ' terpasang di ' + idLabel(r) + ' tetapi di sheet Mesin berstatus "' + v(mSet.get(e), mStat) + '"', suggest: 'Samakan status di sheet Mesin atau perbarui titik irigasi' });
+      if (i && iKey && !iSet.has(i)) add(D, r, cIrr, { level: 'warn', reason: 'Kode Irigator ' + i + ' tidak ditemukan di sheet Irrigator — ' + idLabel(r), suggest: 'Periksa ejaan kode atau tambahkan unit ke sheet Irrigator' });
+      else if (i && iKey && iStat && v(iSet.get(i), iStat) && !/terpasang/i.test(v(iSet.get(i), iStat))) add(D, r, cIrr, { level: 'warn', reason: 'Irrigator ' + i + ' terpasang di ' + idLabel(r) + ' tetapi di sheet Irrigator berstatus "' + v(iSet.get(i), iStat) + '"', suggest: 'Samakan status di sheet Irrigator atau perbarui titik irigasi' });
+      if (a && sKeys.length && !sSet.has(a)) add(D, r, cAir, { level: 'warn', reason: 'Kode Air ' + a + ' tidak ditemukan di sheet Sumber Air — ' + idLabel(r), suggest: 'Periksa kode (Kode Baru/Kode Lama) di sheet Sumber Air' });
+    });
+    // lokasi tercatat lebih dari sekali (bisa sah: 2 engine di 1 lokasi) → info
+    useLok.forEach((rs, l) => { if (rs.length > 1) rs.forEach(r => add(D, r, cLok, { level: 'info', reason: 'Lokasi ' + l + ' tercatat ' + rs.length + ' kali (engine: ' + rs.map(x => x[cEng] || '-').join(', ') + ')', suggest: 'Pastikan memang ada ' + rs.length + ' unit di lokasi ini, bukan baris ganda' })); });
+    // unit berstatus Terpasang di sheet master tetapi tidak tercatat di titik manapun
+    if (mKey && mStat) M.rows.forEach(r => { const k = v(r, mKey); if (k && /terpasang/i.test(v(r, mStat)) && !useEng.has(k)) { M.issues.push({ row: r._i + 2, col: mStat, value: r[mStat], id: k, sheet: M.name, level: 'warn', _rel: true, _calc: true, reason: 'Mesin ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[mStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
+    if (iKey && iStat) I.rows.forEach(r => { const k = v(r, iKey); if (k && /terpasang/i.test(v(r, iStat)) && !useIrr.has(k)) { I.issues.push({ row: r._i + 2, col: iStat, value: r[iStat], id: k, sheet: I.name, level: 'warn', _rel: true, _calc: true, reason: 'Irrigator ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[iStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
+  }
+
   /* ---------- Peringatan kualitas data ---------- */
   let ISSUES = [], lastIssueSig = '';
   function updateIssues() {
@@ -989,7 +1038,8 @@
     const sig = important.map(x => x.sheet + x.row + x.col + x.value).join('|');
     if (important.length && sig !== lastIssueSig) {
       const nErr = important.filter(x => x.level === 'error').length;
-      setTimeout(() => toast(`⚠️ ${important.length} nilai di spreadsheet tidak sesuai format${nErr ? ` (${nErr} error)` : ''} — klik tombol "peringatan data" untuk detail`, true), 1200);
+      const nRel = important.filter(x => x._rel).length;
+      setTimeout(() => toast(`⚠️ ${important.length} temuan data${nErr ? ` (${nErr} error)` : ''}${nRel ? ` · ${nRel} relasi titik irigasi/engine/irrigator/sumber air` : ''} — klik tombol "peringatan data" untuk detail`, true), 1200);
     }
     lastIssueSig = sig;
     if ($('issuesModal').classList.contains('show')) renderIssues();
