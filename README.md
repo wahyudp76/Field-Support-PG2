@@ -100,7 +100,7 @@ Dijalankan setiap sinkronisasi; hasilnya masuk panel ⚠️ dan sel terkait diso
 | Level | Kondisi |
 |---|---|
 | **Error** | Satu Kode Engine dipakai di >1 titik irigasi · satu Kode Irigator dipakai di >1 titik |
-| Peringatan | Titik tanpa engine / tanpa irrigator / tanpa sumber air (Sumber Air & Kode Air kosong) · Kode Air kosong padahal jenis terisi (atau sebaliknya) · Kode Engine/Irigator/Air tidak ada di sheet master · engine/irrigator terpasang di titik tetapi status di sheet master bukan "Terpasang" · mesin/irrigator berstatus Terpasang tetapi tidak tercatat di titik manapun |
+| Peringatan | Titik tanpa engine / tanpa irrigator (kecuali komoditi drip: BANANA & GUAVA — lihat `dripCommodities` di config.js) / tanpa sumber air (Sumber Air & Kode Air kosong) · Kode Air kosong padahal jenis terisi (atau sebaliknya) · Kode Engine/Irigator/Air tidak ada di sheet master · engine/irrigator terpasang di titik tetapi status di sheet master bukan "Terpasang" · mesin/irrigator berstatus Terpasang tetapi tidak tercatat di titik manapun |
 | Info | Lokasi yang sama tercatat lebih dari sekali (bisa sah bila memang 2 unit) |
 
 Kode Air yang dipakai lebih dari satu titik **tidak** diperingatkan (satu lebung wajar melayani beberapa titik).

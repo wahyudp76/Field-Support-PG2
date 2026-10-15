@@ -990,7 +990,9 @@
       const e = v(r, cEng), i = v(r, cIrr), a = v(r, cAir), src = v(r, cSrc);
       // kelengkapan titik irigasi
       if (!e) add(D, r, cEng, { level: 'warn', reason: 'Titik irigasi tanpa engine — ' + idLabel(r), suggest: 'Isi Kode Engine yang terpasang di titik ini' });
-      if (!i) add(D, r, cIrr, { level: 'warn', reason: 'Titik irigasi tanpa irrigator — ' + idLabel(r), suggest: 'Isi Kode Irigator, atau beri keterangan bila memang tanpa irrigator' });
+      const drip = (APP_CONFIG.dripCommodities || []).some(c => { const re = new RegExp('\\b' + c + '\\b', 'i'); return re.test(v(r, cWil)) || re.test(v(r, K('Komoditi'))); });
+      if (!i && !drip) add(D, r, cIrr, { level: 'warn', reason: 'Titik irigasi tanpa irrigator — ' + idLabel(r), suggest: 'Isi Kode Irigator (komoditi selain ' + (APP_CONFIG.dripCommodities || []).join('/') + ' memakai irrigator)' });
+      if (i && drip) add(D, r, cIrr, { level: 'info', reason: 'Komoditi drip (' + v(r, cWil) + ') tercatat memakai irrigator ' + i + ' — ' + idLabel(r), suggest: 'Pastikan benar; komoditi ini biasanya memakai irigasi tetes tanpa irrigator' });
       if (!a && !src) add(D, r, cAir, { level: 'warn', reason: 'Titik irigasi tanpa sumber air — ' + idLabel(r), suggest: 'Isi Sumber Air dan Kode Air (kode lebung/deep well)' });
       else if (!a) add(D, r, cAir, { level: 'warn', reason: 'Kode Air kosong padahal Sumber Air terisi (' + src + ') — ' + idLabel(r), suggest: 'Isi Kode Air sesuai sheet Sumber Air' });
       else if (!src) add(D, r, cSrc, { level: 'warn', reason: 'Jenis Sumber Air kosong padahal Kode Air terisi (' + a + ') — ' + idLabel(r), suggest: 'Isi jenis sumber air' });

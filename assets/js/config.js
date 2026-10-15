@@ -28,6 +28,10 @@ window.APP_CONFIG = {
     aktwil:    { name: 'Unit Pendukung',   endHeader: null, block: '^volume' }           // tb_aktwilayah: No, Wilayah, Aktivitas, Kode, Volume
   },
 
+  // Komoditi yang memakai irigasi tetes (drip) → tidak memakai irrigator, sehingga Kode Irigator kosong adalah WAJAR.
+  // Dicocokkan (tanpa membedakan huruf besar/kecil) dengan kolom Wil / Komoditi pada Detail Terpasang.
+  dripCommodities: ['BANANA', 'GUAVA'],
+
   // Kolom non-komponen (dipakai untuk menghitung kondisi A/B/C keseluruhan unit)
   // Kolom komponen dideteksi OTOMATIS (kolom yang seluruh isinya A/B/C). Daftar ini hanya pengecualian tambahan
   // untuk kolom ringkasan yang kebetulan juga berisi A/B/C agar tidak ikut dihitung sebagai komponen.
