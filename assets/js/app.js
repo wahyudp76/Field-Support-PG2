@@ -1066,21 +1066,40 @@
   // klik baris temuan → buka tab terkait, cari kode-nya, tampilkan detail
   $('issuesBody').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-key]'); if (!tr) return;
-    const k = tr.dataset.key, i = +tr.dataset.row - 2; closeIssues(); switchTab(k);
+    const k = tr.dataset.key, i = +tr.dataset.row - 2, id = tr.cells[3] ? tr.cells[3].textContent.trim() : ''; closeIssues(); switchTab(k);
+    if (k === 'pendukung') { // view kustom: cari lewat kotak pencarian, lalu sorot baris
+      pendState.wil.clear(); pendState.jenis.clear(); pendState.akt.clear(); pendState.q = id.toLowerCase();
+      if ($("pend-q")) $("pend-q").value = id; renderPend();
+      const row = [...document.querySelectorAll('#pend-tb tr, #pend-tbA tr')].find(x => [...x.cells].some(c => c.textContent.trim() === id));
+      if (row) { row.classList.add('row-hl'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => row.classList.remove('row-hl'), 3000); }
+      return;
+    }
+    if (k === 'pipa' || !RAW[k] || RAW[k].error || !state[k]) return; // view tanpa tabel baris/sheet gagal: cukup pindah tab
     const r = RAW[k].rows[i]; if (!r) return;
-    const idc = RAW[k].meta.idCol; resetFilters(k); $(k + '-search').value = r[idc] || ''; state[k].search = r[idc] || ''; renderView(k); showDetail(k, r._i);
+    const idc = RAW[k].meta.idCol; resetFilters(k); if ($(k + '-search')) $(k + '-search').value = r[idc] || ''; state[k].search = r[idc] || ''; renderView(k); showDetail(k, r._i);
   });
 
   /* ---------- export ---------- */
   window.exportCSV = function () {
-    const k = currentTab === 'overview' ? 'detail' : currentTab; if (!RAW[k] || RAW[k].error) return;
-    const h = RAW[k].headers, rows = filtered(k);
-    const csv = [h.join(','), ...rows.map(r => h.map(c => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `${RAW[k].name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast(`Export ${fmt(rows.length)} baris → ${a.download}`);
+    const k = currentTab === 'overview' ? 'detail' : currentTab; if (!RAW[k] || RAW[k].error) { toast('Tidak ada data untuk diekspor'); return; }
+    const dl = (name, h, rows) => {
+      const csv = [h.join(','), ...rows.map(r => h.map(c => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = `${name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      return a.download;
+    };
+    if (k === 'pendukung') { // view kustom: ekspor sesuai filter aktif, dua berkas (unit + tangki aktivitas)
+      const V = pendView(); if (!V.M.ok) { toast('Data unit pendukung belum siap'); return; }
+      const f1 = dl(RAW.pendukung.name + '_tb_pendukung', V.M.P.headers, V.p);
+      let msg = `Export ${fmt(V.p.length)} unit → ${f1}`;
+      if (V.M.okA) { const f2 = dl(RAW.pendukung.name + '_tb_aktwilayah', V.M.A.headers, V.a); msg += ` · ${fmt(V.a.length)} tangki → ${f2}`; }
+      toast(msg); return;
+    }
+    const h = RAW[k].headers, rows = (k === 'pipa' || !state[k]) ? RAW[k].rows : filtered(k);
+    const f = dl(RAW[k].name, h, rows);
+    toast(`Export ${fmt(rows.length)} baris → ${f}`);
   };
 
   /* ---------- init ---------- */

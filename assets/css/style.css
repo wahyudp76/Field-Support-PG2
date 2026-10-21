@@ -261,3 +261,6 @@ td.cell-warn{color:#f87171;font-weight:700}
 #ov-pipa > .ov-pipa-grid,#ov-pend > .ov-pipa-grid{flex:1}
 #ov-pipa > div:last-child,#ov-pend > div:last-child{margin-top:auto!important;padding-top:8px}
 #ov-pipa > .ov-pipa-grid{align-items:start;align-content:start}
+
+/* sorot baris hasil navigasi dari modal peringatan */
+tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: background .6s; }
