@@ -4,21 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Dashboard monitoring Field Support Irigasi PG 2 — unit terpasang, sumber air, mesin, dan irrigator.">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#db8528">
 <title>Dashboard Field Support Irigasi PG 2</title>
 <!-- PWA -->
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
-<link rel="shortcut icon" href="assets/icons/favicon.ico">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg?v=21">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png?v=21">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png?v=21">
+<link rel="shortcut icon" href="assets/icons/favicon.ico?v=21">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png?v=21">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FS Irigasi PG2">
 <meta name="application-name" content="FS Irigasi PG2">
-<meta name="msapplication-TileColor" content="#0f766e">
-<meta name="msapplication-TileImage" content="assets/icons/icon-144.png">
+<meta name="msapplication-TileColor" content="#db8528">
+<meta name="msapplication-TileImage" content="assets/icons/icon-144.png?v=21">
 <meta property="og:title" content="Dashboard Field Support Irigasi PG 2">
 <meta property="og:description" content="Monitoring unit terpasang, sumber air, mesin, dan irrigator PG 2.">
 <meta property="og:image" content="https://wahyudp76.github.io/Field-Support-PG2/assets/img/og-cover.png">
@@ -26,17 +27,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="assets/css/style.css?v=20">
+<link rel="stylesheet" href="assets/css/style.css?v=21">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
 </head>
 <body>
 
-<div id="loader"><div style="text-align:center"><div class="spinner"></div><div style="color:var(--muted);font-size:14px">Menyinkronkan data dari Google Spreadsheet…</div></div></div>
+<div id="loader"><div style="text-align:center"><div class="spinner"><img src="assets/icons/logo-white-192.png?v=21" alt="" width="34" height="34"></div><div style="color:var(--muted);font-size:14px">Menyinkronkan data dari Google Spreadsheet…</div></div></div>
 <div class="toast" id="toast"></div>
 
 <header>
   <div class="brand">
-    <div class="logo">💧</div>
+    <div class="logo"><img src="assets/icons/logo-white-192.png?v=21" alt="Logo Field Support Irigasi PG 2" width="30" height="30"></div>
     <div><h1>Field Support Irigasi PG 2</h1><p>Monitoring Unit Terpasang · Sumber Air · Mesin · Irrigator</p></div>
   </div>
   <div class="hdr-actions">
@@ -113,9 +114,9 @@
   </div>
 </div>
 
-<script src="assets/js/config.js?v=20" defer></script>
-<script src="assets/js/data.js?v=20" defer></script>
-<script src="assets/js/app.js?v=20" defer></script>
+<script src="assets/js/config.js?v=21" defer></script>
+<script src="assets/js/data.js?v=21" defer></script>
+<script src="assets/js/app.js?v=21" defer></script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

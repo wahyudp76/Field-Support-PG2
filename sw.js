@@ -2,9 +2,9 @@
  * - File aplikasi (HTML/CSS/JS): network-first → selalu versi terbaru, fallback cache saat offline
  * - Ikon & library CDN: cache-first (jarang berubah)
  * - Data Google Sheets: network-first, simpan salinan terakhir untuk mode offline */
-const VERSION = 'fs-pg2-v15';
+const VERSION = 'fs-pg2-v16';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './assets/css/style.css', './assets/js/config.js', './assets/js/data.js', './assets/js/app.js',
-  './assets/icons/icon-192.png', './assets/icons/icon-512.png', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js'];
+  './assets/icons/icon-192.png', './assets/icons/logo-white-192.png', './assets/icons/favicon.svg', './assets/icons/icon-512.png', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => Promise.allSettled(SHELL.map(u => c.add(u)))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION && k !== VERSION + '-data').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
