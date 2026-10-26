@@ -150,7 +150,7 @@
   /* ---------- theme ---------- */
   function applyTheme(t) { document.body.setAttribute('data-theme', t); $('themeBtn').innerHTML = (t === 'light' ? '☀️' : '🌙') + ' <span class="t">Tema</span>'; localStorage.setItem('fs_theme', t); }
   window.toggleTheme = () => { applyTheme(document.body.getAttribute('data-theme') === 'light' ? 'dark' : 'light'); rerenderAll(); };
-  applyTheme(localStorage.getItem('fs_theme') || 'dark');
+  applyTheme(localStorage.getItem('fs_theme') || 'light'); // default: tema terang
 
   /* ---------- load ---------- */
   const CACHE_KEY = 'fs_pg2_data_v1';
