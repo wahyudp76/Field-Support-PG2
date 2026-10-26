@@ -8,7 +8,7 @@
   'use strict';
   const { toNumber } = DataLayer;
   const PAGE_SIZES = [25, 50, 100, 250, 'Semua'];
-  const PALETTE = ['#22c55e', '#38bdf8', '#a78bfa', '#f59e0b', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#e11d48', '#eab308', '#10b981', '#8b5cf6'];
+  const PALETTE = ['#f59e0b', '#38bdf8', '#22c55e', '#a78bfa', '#f97316', '#14b8a6', '#ec4899', '#6366f1', '#fbbf24', '#06b6d4', '#e11d48', '#84cc16', '#c2410c', '#8b5cf6'];
 
   /* ---------- helper ---------- */
   const $ = id => document.getElementById(id);
@@ -34,7 +34,7 @@
       freezeUntil: 'Wil',
       filters: ['Wil', 'Bengkel', 'Jenis Engine', 'Sumber Air', 'Terpasang', 'Power', 'Tanggal'],
       kpis: [
-        { label: 'Total Unit', icon: '🚜', c: '#22c55e', fn: r => r.length },
+        { label: 'Total Unit', icon: '🚜', c: '#f59e0b', fn: r => r.length },
         { label: 'Terpasang', icon: '✅', c: '#38bdf8', fn: r => r.filter(x => isTrue(val(x, 'Terpasang', 'Siram'), /terpasang/i)).length },
         { label: 'Rusak', icon: '🛠️', c: '#ef4444', fn: r => r.filter(x => isTrue(val(x, 'Terpasang', 'Siram'), /rusak/i)).length },
         { label: 'Wilayah', icon: '📍', c: '#a78bfa', fn: r => uniq(r, 'Wil').length },
@@ -466,7 +466,7 @@
   window.closeModal = () => $('modal').classList.remove('show');
 
   /* ---------- charts ---------- */
-  function themeColors() { const l = document.body.getAttribute('data-theme') === 'light'; return { text: l ? '#475569' : '#94a3b8', grid: l ? '#e2e8f0' : '#243049', border: l ? '#ffffff' : '#18233a' }; }
+  function themeColors() { const l = document.body.getAttribute('data-theme') === 'light'; return { text: l ? '#6b5440' : '#b09a85', grid: l ? '#f0dfc9' : '#3d2e21', border: l ? '#ffffff' : '#2a1f16' }; }
   const centerText = {
     id: 'centerText',
     afterDraw(chart) {
@@ -530,7 +530,7 @@
       data, fill: true, tension: .4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2.5, borderColor: '#38bdf8', pointBackgroundColor: '#38bdf8',
       backgroundColor: c => { const { ctx: g, chartArea } = c.chart; if (!chartArea) return 'rgba(56,189,248,.15)'; const gr = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); gr.addColorStop(0, 'rgba(56,189,248,.35)'); gr.addColorStop(1, 'rgba(56,189,248,0)'); return gr; }
     } : {
-      data, backgroundColor: type === 'hbar' ? 'rgba(239,68,68,.85)' : 'rgba(34,197,94,.9)', hoverBackgroundColor: type === 'hbar' ? '#ef4444' : '#22c55e',
+      data, backgroundColor: type === 'hbar' ? 'rgba(239,68,68,.85)' : 'rgba(245,158,11,.9)', hoverBackgroundColor: type === 'hbar' ? '#ef4444' : '#f59e0b',
       borderRadius: 8, borderSkipped: false, maxBarThickness: 42
     };
 
@@ -567,7 +567,7 @@
   function renderOverview() {
     const d = RAW.detail?.rows || [], s = RAW.sumber?.rows || [], m = RAW.mesin?.rows || [], ir = RAW.irrigator?.rows || [];
     const k = [
-      { l: 'Unit Terpasang', v: fmt(d.length), i: '🚜', c: '#22c55e', t: 'detail' },
+      { l: 'Unit Terpasang', v: fmt(d.length), i: '🚜', c: '#f59e0b', t: 'detail' },
       { l: 'Wilayah Aktif', v: uniq(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil').length, i: '📍', c: '#38bdf8', t: 'detail' },
       { l: 'Total Sumber Air', v: fmt(s.length), i: '🌊', c: '#a78bfa', t: 'sumber' },
       { l: 'Lebung', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length), i: '🏞️', c: '#14b8a6', t: 'sumber' },
