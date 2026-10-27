@@ -21,7 +21,7 @@ window.APP_CONFIG = {
     detail:    { name: 'Detail Terpasang', endHeader: 'Kode Air' },
     sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
     mesin:     { name: 'Mesin',            endHeader: null       }, // berhenti di header kosong pertama
-    irrigator: { name: 'Irrigator',        endHeader: 'Status'   },
+    irrigator: { name: 'Irrigator',        endHeader: null       }, // berhenti di header kosong pertama (kolom inspeksi SKOR/KONDISI ikut terbaca)
     pipa:      { name: 'Pipa',             endHeader: 'Grand Total' }, // matriks ringkasan: Placement × jenis × kondisi (satuan: batang)
     // Sheet "Unit Pendukung" berisi 2 tabel berdampingan → dibaca sebagai 2 key (block = regex header penanda blok)
     pendukung: { name: 'Unit Pendukung',   endHeader: null, block: '^kode\\s*unit$' },  // tb_pendukung: Wilayah, Aktivitas(jenis unit), Kode Unit
@@ -36,8 +36,8 @@ window.APP_CONFIG = {
   // Kolom komponen dideteksi OTOMATIS (kolom yang seluruh isinya A/B/C). Daftar ini hanya pengecualian tambahan
   // untuk kolom ringkasan yang kebetulan juga berisi A/B/C agar tidak ikut dihitung sebagai komponen.
   nonComponentCols: {
-    mesin:     ['Mesin', 'Prodo', 'Category'],
-    irrigator: ['Category']
+    mesin:     ['Mesin', 'Prodo', 'KONDISI', 'TEMUAN (B/C)', 'PETUGAS'],
+    irrigator: ['KONDISI', 'TEMUAN (B/C)', 'PETUGAS']
   },
 
   // Sinonim nama kolom: dipakai bila header di spreadsheet diganti namanya

@@ -217,11 +217,11 @@
           if (v === 'C') { worst = 'C'; bad.push(h + ' (C)'); }
           else if (v === 'B') { if (worst !== 'C') worst = 'B'; bad.push(h + ' (B)'); }
         }
-        if (!filled) { worst = ''; issues.push({ row: r._i + 2, col: 'Kondisi', value: '(semua komponen kosong)', level: 'info', reason: 'Belum ada penilaian komponen A/B/C', suggest: 'Isi kondisi komponen unit ini' }); }
-        r['Kondisi'] = worst;
+        if (!filled) { worst = ''; issues.push({ row: r._i + 2, col: 'Kondisi Komponen', value: '(semua komponen kosong)', level: 'info', reason: 'Belum ada penilaian komponen A/B/C', suggest: 'Isi kondisi komponen unit ini' }); }
+        r['Kondisi Komponen'] = worst;
         r['Komponen Bermasalah'] = bad.join(', ');
       });
-      if (!headers.includes('Kondisi')) headers.push('Kondisi');
+      if (!headers.includes('Kondisi Komponen')) headers.push('Kondisi Komponen');
       if (!headers.includes('Komponen Bermasalah')) headers.push('Komponen Bermasalah');
     }
     issues.forEach(x => { x.id = rows[x.row - 2][idCol] || ''; x.sheet = cfg.name; });

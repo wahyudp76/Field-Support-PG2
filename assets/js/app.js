@@ -87,25 +87,25 @@
     mesin: {
       title: 'Inventaris Mesin / Engine', icon: '⚙️',
       freezeUntil: 'Asal Mesin',   // kolom paling kiri s.d. kolom ini dibekukan saat scroll horizontal
-      filters: ['Asal Mesin', 'Komoditi', 'Jenis', 'Spec', 'Pompa', 'Power', 'Category', 'Status', 'Kondisi'],
+      filters: ['Asal Mesin', 'Komoditi', 'Jenis', 'Spec', 'Pompa', 'Power', 'KONDISI', 'Status', 'Kondisi Komponen'],
       kpis: [
         { label: 'Total Mesin', icon: '⚙️', c: '#f59e0b', fn: r => r.length },
         { label: 'Asal Mesin', icon: '🏭', c: '#38bdf8', fn: r => uniq(r, 'Asal Mesin').length },
         { label: 'Terpasang', icon: '✅', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Status'], /terpasang/i)).length },
         { label: 'Standby', icon: '⏸️', c: '#a78bfa', fn: r => r.filter(x => isTrue(x['Status'], /standby/i)).length },
         { label: 'Rusak', icon: '🛠️', c: '#ef4444', fn: r => r.filter(x => isTrue(x['Status'], /rusak/i)).length },
-        { label: 'Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi'] && x['Kondisi'] !== 'A').length },
+        { label: 'Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi Komponen'] && x['Kondisi Komponen'] !== 'A').length },
         { label: 'Ada Catatan', icon: '📝', c: '#f97316', fn: r => r.filter(x => x['Keterangan']).length },
       ],
       charts: [
         { id: 'c1', title: 'Mesin per Komoditi', type: 'bar', key: 'Komoditi' },
         { id: 'c2', title: 'Asal Mesin', type: 'doughnut', key: 'Asal Mesin' },
-        { id: 'c3', title: 'Kondisi Keseluruhan', type: 'doughnut', key: 'Kondisi', colors: { A: '#22c55e', B: '#f59e0b', C: '#ef4444' } },
+        { id: 'c3', title: 'Kondisi Keseluruhan', type: 'doughnut', key: 'Kondisi Komponen', colors: { A: '#22c55e', B: '#f59e0b', C: '#ef4444' } },
         { id: 'c4', title: 'Komponen Paling Sering Bermasalah', type: 'hbar', custom: 'components' },
       ],
       chips: {
-        'Kondisi': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
-        'Category': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
+        'Kondisi Komponen': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
+        'KONDISI': v => /baik/i.test(v) ? 'chip-green' : /perhatian/i.test(v) ? 'chip-amber' : 'chip-red', // kolom KONDISI hasil inspeksi (Baik / Perlu Perhatian / Kritis) — menggantikan kolom Category
         'Status': v => /terpasang|siap|aktif/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : /standby/i.test(v) ? 'chip-amber' : 'chip-gray',
         'Pompa': v => /sumur/i.test(v) ? 'chip-blue' : 'chip-purple',
         'Jenis': () => 'chip-gray',
@@ -118,14 +118,14 @@
     irrigator: {
       title: 'Inventaris Irrigator', icon: '💦',
       freezeUntil: 'WILAYAH',
-      filters: ['WILAYAH', 'Unit', 'Category', 'Status', 'Nozzle', 'Kondisi'],
+      filters: ['WILAYAH', 'Unit', 'KONDISI', 'Status', 'Nozzle', 'Kondisi Komponen'],
       kpis: [
         { label: 'Total Irrigator', icon: '💦', c: '#38bdf8', fn: r => r.length },
         { label: 'Terpasang', icon: '✅', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Status'], /terpasang/i)).length },
         { label: 'Rusak', icon: '🛠️', c: '#ef4444', fn: r => r.filter(x => isTrue(x['Status'], /rusak/i)).length },
         { label: 'Wilayah', icon: '📍', c: '#a78bfa', fn: r => uniq(r, 'WILAYAH').length },
-        { label: 'Kondisi A — Baik', icon: '🟢', c: '#22c55e', fn: r => r.filter(x => x['Kondisi'] === 'A').length },
-        { label: 'Ada Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi'] !== 'A').length },
+        { label: 'Kondisi A — Baik', icon: '🟢', c: '#22c55e', fn: r => r.filter(x => x['Kondisi Komponen'] === 'A').length },
+        { label: 'Ada Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi Komponen'] !== 'A').length },
       ],
       charts: [
         { id: 'c1', title: 'Irrigator per Wilayah', type: 'bar', key: 'WILAYAH' },
@@ -135,8 +135,8 @@
       ],
       chips: {
         'Status': v => /terpasang/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-gray',
-        'Kondisi': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
-        'Category': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
+        'Kondisi Komponen': v => v === 'A' ? 'chip-green' : v === 'B' ? 'chip-amber' : 'chip-red',
+        'KONDISI': v => /baik/i.test(v) ? 'chip-green' : /perhatian/i.test(v) ? 'chip-amber' : 'chip-red', // kolom KONDISI hasil inspeksi (Baik / Perlu Perhatian / Kritis) — menggantikan kolom Category
         'Komponen Bermasalah': () => 'chip-red'
       }
     }
@@ -589,7 +589,7 @@
     const wil = count(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil').filter(x => x[0] !== '(kosong)').slice(0, 10), mx = wil[0]?.[1] || 1;
     $('ov-wil').innerHTML = wil.map(([w, n]) => `<li><b>${esc(w)}</b><div class="bar"><span style="width:${n / mx * 100}%"></span></div><span>${n} unit</span></li>`).join('') || '<li class="empty">Belum ada data</li>';
     const lbl = { '(kosong)': 'Belum dinilai', A: 'Kondisi A — Baik', B: 'Kondisi B — Perlu Perhatian', C: 'Kondisi C — Perlu Perbaikan' };
-    const li = (label, arr) => `<li class="sub"><b>${label}</b></li>` + count(arr, 'Kondisi').sort().map(([c, n]) => `<li><span class="chip ${c === 'A' ? 'chip-green' : c === 'B' ? 'chip-amber' : 'chip-red'}">${c}</span><span style="flex:1;margin-left:10px">${lbl[c] || c}</span><b>${n}</b></li>`).join('');
+    const li = (label, arr) => `<li class="sub"><b>${label}</b></li>` + count(arr, 'Kondisi Komponen').sort().map(([c, n]) => `<li><span class="chip ${c === 'A' ? 'chip-green' : c === 'B' ? 'chip-amber' : 'chip-red'}">${c}</span><span style="flex:1;margin-left:10px">${lbl[c] || c}</span><b>${n}</b></li>`).join('');
     $('ov-kondisi').innerHTML = li('⚙️ Mesin', m) + li('💦 Irrigator', ir);
     renderPipaResume();
     renderPendResume();
