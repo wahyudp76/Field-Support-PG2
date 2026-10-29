@@ -267,3 +267,4 @@ td.cell-warn{color:#f87171;font-weight:700}
 
 /* sorot baris hasil navigasi dari modal peringatan */
 tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: background .6s; }
+.kpi .sub{font-size:11px;color:var(--muted);margin-top:2px}

@@ -95,6 +95,7 @@
         { label: 'Standby', icon: '⏸️', c: '#a78bfa', fn: r => r.filter(x => isTrue(x['Status'], /standby/i)).length },
         { label: 'Rusak', icon: '🛠️', c: '#ef4444', fn: r => r.filter(x => isTrue(x['Status'], /rusak/i)).length },
         { label: 'Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi Komponen'] && x['Kondisi Komponen'] !== 'A').length },
+        { label: 'Kritis (Inspeksi)', icon: '🔴', c: '#ef4444', fn: r => r.filter(x => /kritis/i.test(x['KONDISI'] || '')).length, sub: r => { const n = r.filter(x => /perhatian/i.test(x['KONDISI'] || '')).length; return n ? n + ' perlu perhatian' : ''; } },
         { label: 'Ada Catatan', icon: '📝', c: '#f97316', fn: r => r.filter(x => x['Keterangan']).length },
       ],
       charts: [
@@ -126,6 +127,7 @@
         { label: 'Wilayah', icon: '📍', c: '#a78bfa', fn: r => uniq(r, 'WILAYAH').length },
         { label: 'Kondisi A — Baik', icon: '🟢', c: '#22c55e', fn: r => r.filter(x => x['Kondisi Komponen'] === 'A').length },
         { label: 'Ada Komponen B/C', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => x['Kondisi Komponen'] !== 'A').length },
+        { label: 'Kritis (Inspeksi)', icon: '🔴', c: '#ef4444', fn: r => r.filter(x => /kritis/i.test(x['KONDISI'] || '')).length, sub: r => { const n = r.filter(x => /perhatian/i.test(x['KONDISI'] || '')).length; return n ? n + ' perlu perhatian' : ''; } },
       ],
       charts: [
         { id: 'c1', title: 'Irrigator per Wilayah', type: 'bar', key: 'WILAYAH' },
@@ -359,7 +361,7 @@
     if (CONFIG[k].custom === 'pendukung') return renderPend();
     const cfg = CONFIG[k], rows = filtered(k), s = state[k], headers = RAW[k].headers;
 
-    $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div></div>`).join('');
+    $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div>${x.sub && x.sub(rows) ? `<div class="sub">${esc(x.sub(rows))}</div>` : ''}</div>`).join('');
 
     // chip filter aktif
     const af = [];
@@ -997,8 +999,15 @@
       else if (!a) add(D, r, cAir, { level: 'warn', reason: 'Kode Air kosong padahal Sumber Air terisi (' + src + ') — ' + idLabel(r), suggest: 'Isi Kode Air sesuai sheet Sumber Air' });
       else if (!src) add(D, r, cSrc, { level: 'warn', reason: 'Jenis Sumber Air kosong padahal Kode Air terisi (' + a + ') — ' + idLabel(r), suggest: 'Isi jenis sumber air' });
       // pemakaian ganda
-      if (e && useEng.get(e).length > 1) add(D, r, cEng, { level: 'error', reason: 'Engine ' + e + ' dipakai di ' + useEng.get(e).length + ' titik irigasi: ' + useEng.get(e).map(x => x[cLok] || ('baris ' + (x._i + 2))).join(', '), suggest: 'Satu engine hanya boleh terpasang di satu titik — periksa kode yang salah ketik atau baris lama yang belum dihapus' });
-      if (i && useIrr.get(i).length > 1) add(D, r, cIrr, { level: 'error', reason: 'Irrigator ' + i + ' dipakai di ' + useIrr.get(i).length + ' titik irigasi: ' + useIrr.get(i).map(x => x[cLok] || ('baris ' + (x._i + 2))).join(', '), suggest: 'Satu irrigator hanya boleh terpasang di satu titik — periksa kode atau baris ganda' });
+      // engine/irrigator dipakai >1 baris: bedakan "baris duplikat" (lokasi sama) dari "dipakai di titik berbeda"
+      const dupMsg = (what, code, list) => {
+        const loks = list.map(x => x[cLok] || ('baris ' + (x._i + 2))), brs = list.map(x => 'baris ' + (x._i + 2)).join(' & ');
+        return new Set(loks).size === 1
+          ? { reason: 'Baris duplikat: titik ' + loks[0] + ' dengan ' + what + ' ' + code + ' tercatat ' + list.length + ' kali (' + brs + ')', suggest: 'Hapus salah satu baris ganda di sheet Detail Terpasang' }
+          : { reason: what.charAt(0).toUpperCase() + what.slice(1) + ' ' + code + ' dipakai di ' + list.length + ' titik irigasi: ' + loks.join(', ') + ' (' + brs + ')', suggest: 'Satu ' + what + ' hanya boleh terpasang di satu titik — periksa kode yang salah ketik atau baris lama yang belum dihapus' };
+      };
+      if (e && useEng.get(e).length > 1) add(D, r, cEng, { level: 'error', ...dupMsg('engine', e, useEng.get(e)) });
+      if (i && useIrr.get(i).length > 1) add(D, r, cIrr, { level: 'error', ...dupMsg('irrigator', i, useIrr.get(i)) });
       // referensi silang ke sheet master
       if (e && mKey && !mSet.has(e)) add(D, r, cEng, { level: 'warn', reason: 'Kode Engine ' + e + ' tidak ditemukan di sheet Mesin — ' + idLabel(r), suggest: 'Periksa ejaan kode atau tambahkan unit ke sheet Mesin' });
       else if (e && mKey && mStat && v(mSet.get(e), mStat) && !/terpasang/i.test(v(mSet.get(e), mStat))) add(D, r, cEng, { level: 'warn', reason: 'Engine ' + e + ' terpasang di ' + idLabel(r) + ' tetapi di sheet Mesin berstatus "' + v(mSet.get(e), mStat) + '"', suggest: 'Samakan status di sheet Mesin atau perbarui titik irigasi' });
