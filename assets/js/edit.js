@@ -106,11 +106,11 @@
         <div class="wide edit-sug" id="ed-sug"><div class="empty">Ketik lokasi baru untuk melihat rekomendasi sumber air.</div></div>
         <label>PIN <input id="ed-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
         <label>Nama pengisi <input id="ed-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
-        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ed-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ed-cancel">Batal</button><button type="submit" class="btn btn-primary" id="ed-save">💾 Simpan ke Spreadsheet</button></div>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ed-setup">⚙ Atur URL Web App</button><button type="button" class="btn btn-danger" id="ed-withdraw">🔧 Tarik ke Bengkel</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ed-cancel">Batal</button><button type="submit" class="btn btn-primary" id="ed-save">💾 Simpan Perpindahan</button></div>
         <div class="wide edit-msg" id="ed-msg"></div>
       </form>`;
     $('editModal').classList.add('show');
-    $('ed-cancel').onclick = close; $('ed-setup').onclick = () => setup(() => open(rowIndex));
+    $('ed-cancel').onclick = close; $('ed-setup').onclick = () => setup(() => open(rowIndex)); $('ed-withdraw').onclick = () => withdraw(r);
     let t; const upd = () => { clearTimeout(t); t = setTimeout(() => renderSug(r), 180); };
     $('ed-lok').oninput = upd; $('ed-wil').onchange = upd;
     $('ed-sug').onclick = e => { const b = e.target.closest('[data-kode]'); if (!b) return; $('ed-ka').value = b.dataset.kode; if (b.dataset.jenis) $('ed-sa').value = b.dataset.jenis; [...$('ed-sug').querySelectorAll('.sug')].forEach(x => x.classList.toggle('on', x === b)); };
@@ -173,6 +173,47 @@
     } catch (e) {
       msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (e.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : e.message);
     } finally { btn.disabled = false; }
+  }
+
+  /* ---------- tarik ke bengkel: hapus baris unit di sheet ---------- */
+  function withdraw(r) {
+    const stOpts = ['', 'Standby', 'Rusak', 'Perbaikan'];
+    $('editTitle').textContent = '🔧 Tarik ke Bengkel — ' + (r['Kode Engine'] || r['Lokasi']);
+    $('editBody').innerHTML = `
+      <div class="edit-cur"><b>Unit yang ditarik</b>
+        <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div><div><span>Kode Air</span>${esc(r['Kode Air'] || '–')}</div><div><span>Baris sheet</span>${r._i + 2}</div></div></div>
+      <div class="sug-warn">⚠️ Baris unit ini akan <b>DIHAPUS</b> dari sheet <b>Detail Terpasang</b> (tidak bisa dibatalkan dari dashboard). Riwayatnya tetap tercatat di sheet <b>Log Perpindahan</b>.</div>
+      <form id="wdForm" class="edit-form" autocomplete="off">
+        <label>Status baru di sheet Mesin ${r['Kode Engine'] ? '(' + esc(r['Kode Engine']) + ')' : ''}<select id="wd-sm" ${r['Kode Engine'] ? '' : 'disabled'}>${stOpts.map(o => `<option value="${o}" ${o === 'Standby' && r['Kode Engine'] ? 'selected' : ''}>${o || '(tidak diubah)'}</option>`).join('')}</select></label>
+        <label>Status baru di sheet Irrigator ${r['Kode Irigator'] ? '(' + esc(r['Kode Irigator']) + ')' : ''}<select id="wd-si" ${r['Kode Irigator'] ? '' : 'disabled'}>${stOpts.map(o => `<option value="${o}" ${o === 'Standby' && r['Kode Irigator'] ? 'selected' : ''}>${o || '(tidak diubah)'}</option>`).join('')}</select></label>
+        <label class="wide">Alasan / keterangan <input id="wd-ket" placeholder="mis. overhaul, ganti pompa, musim selesai"></label>
+        <label>PIN <input id="wd-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
+        <label>Nama pengisi <input id="wd-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
+        <label class="wide chk"><input type="checkbox" id="wd-ok"> Saya yakin ingin menghapus baris unit <b>${esc(r['Kode Engine'] || r['Lokasi'])}</b> di lokasi <b>${esc(r['Lokasi'])}</b></label>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="wd-back">← Kembali</button><span class="grow"></span><button type="button" class="btn btn-outline" id="wd-cancel">Batal</button><button type="submit" class="btn btn-danger" id="wd-save" disabled>🔧 Tarik ke Bengkel & Hapus Baris</button></div>
+        <div class="wide edit-msg" id="wd-msg"></div>
+      </form>`;
+    $('wd-back').onclick = () => open(r._i); $('wd-cancel').onclick = close;
+    $('wd-ok').onchange = () => { $('wd-save').disabled = !$('wd-ok').checked; };
+    $('wdForm').onsubmit = async e => {
+      e.preventDefault();
+      const pin = $('wd-pin').value.trim(), msg = $('wd-msg'), btn = $('wd-save');
+      if (!pin) { msg.textContent = 'PIN wajib diisi.'; msg.className = 'wide edit-msg err'; return; }
+      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menghapus baris di spreadsheet…';
+      try {
+        const j = await post({ action: 'withdraw', pin, user: $('wd-user').value.trim(), row: r._i + 2, from: { lokasi: r['Lokasi'] || '', kodeEngine: r['Kode Engine'] || '', kodeIrigator: r['Kode Irigator'] || '' },
+          statusMesin: $('wd-sm').value, statusIrrigator: $('wd-si').value, keterangan: $('wd-ket').value.trim() });
+        if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
+        localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('wd-user').value.trim());
+        if (F().removeRow) F().removeRow('detail', r);
+        const st = [j.status && j.status.mesin ? 'Mesin → ' + j.status.mesin : '', j.status && j.status.irrigator ? 'Irrigator → ' + j.status.irrigator : ''].filter(Boolean).join(', ');
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Baris ' + j.row + ' dihapus' + (st ? ' · ' + st : '') + '. Menyinkronkan ulang…';
+        toast('Unit ' + (r['Kode Engine'] || r['Lokasi']) + ' ditarik ke bengkel ✔');
+        setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1200);
+      } catch (err) {
+        msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (err.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : err.message); btn.disabled = false;
+      }
+    };
   }
 
   /* ---------- pengaturan URL Web App ---------- */

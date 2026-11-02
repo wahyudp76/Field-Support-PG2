@@ -1129,7 +1129,9 @@
   window.addEventListener('appinstalled', () => { toast('Aplikasi berhasil dipasang ✔'); const b = $('installBtn'); if (b) b.style.display = 'none'; });
 
   /* ---------- jembatan untuk modul edit (edit.js) ---------- */
-  window.__FS = { RAW, loadData, toast, esc, fmt, refreshRow: (k, r) => { r._s = RAW[k].headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); dirty[k] = true; closeModal(); renderView(k); } };
+  window.__FS = { RAW, loadData, toast, esc, fmt,
+    refreshRow: (k, r) => { r._s = RAW[k].headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); dirty[k] = true; closeModal(); renderView(k); },
+    removeRow: (k, r) => { RAW[k].rows = RAW[k].rows.filter(x => x !== r); dirty[k] = true; closeModal(); renderView(k); $('badge-' + k).textContent = fmt(RAW[k].rows.length); } };
 
   /* ---------- Service worker: notifikasi versi baru ---------- */
   if ('serviceWorker' in navigator) {

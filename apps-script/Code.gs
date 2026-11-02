@@ -27,6 +27,7 @@
 var SPREADSHEET_ID = '1WbGTDqC0Anh6O54twsJfiBiWcTri7FHyQjXIFrOoLz4'; // dipakai bila project ini TIDAK terikat ke spreadsheet
 var SHEET_DETAIL = 'Detail Terpasang';
 var SHEET_LOG = 'Log Perpindahan';      // dibuat otomatis bila belum ada
+var SHEET_MESIN = 'Mesin', SHEET_IRR = 'Irrigator';
 var MAX_HISTORY = 400;                  // panjang maksimal kolom Keterangan
 
 function doGet(e) {
@@ -35,7 +36,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 2, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 3, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move) atau ?action=ping' });
 }
@@ -51,6 +52,7 @@ function doPost(e) {
 
   if (body.action === 'verify') return out_({ ok: true });
   if (body.action === 'move') return move_(body);
+  if (body.action === 'withdraw') return withdraw_(body);
   return out_({ ok: false, error: 'Aksi tidak dikenal: ' + body.action });
 }
 
@@ -116,6 +118,55 @@ function move_(b) {
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }
+}
+
+/* ---------- tarik ke bengkel: hapus baris unit di Detail Terpasang (+ opsional ubah Status di Mesin/Irrigator) ---------- */
+function withdraw_(b) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID), sh = ss.getSheetByName(SHEET_DETAIL);
+    if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_DETAIL + '" tidak ditemukan' });
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var col = function (name) { var i = headers.indexOf(name); if (i < 0) throw new Error('Kolom "' + name + '" tidak ada di header'); return i + 1; };
+    var cLok = col('Lokasi'), cWil = col('Wil'), cEng = col('Kode Engine'), cIrr = col('Kode Irigator'), cKA = col('Kode Air');
+    var from = b.from || {}, same = function (v) {
+      return String(v[cLok - 1]).trim() === String(from.lokasi || '').trim() && String(v[cEng - 1]).trim() === String(from.kodeEngine || '').trim() && String(v[cIrr - 1]).trim() === String(from.kodeIrigator || '').trim();
+    };
+    var row = Number(b.row) || 0;
+    if (!(row >= 2 && row <= lastRow && same(sh.getRange(row, 1, 1, lastCol).getValues()[0]))) {
+      row = 0; var all = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+      for (var i = 0; i < all.length; i++) if (same(all[i])) { if (row) return out_({ ok: false, error: 'Ada lebih dari satu baris yang cocok — rapikan baris ganda dulu' }); row = i + 2; }
+      if (!row) return out_({ ok: false, error: 'Baris unit tidak ditemukan (mungkin sudah diubah orang lain). Refresh dashboard lalu ulangi.' });
+    }
+    var old = sh.getRange(row, 1, 1, lastCol).getValues()[0];
+    var eng = String(old[cEng - 1]).trim(), irr = String(old[cIrr - 1]).trim();
+    sh.deleteRow(row);
+
+    // opsional: perbarui kolom Status unit di sheet Mesin / Irrigator (mis. "Standby" / "Rusak")
+    var upd = { mesin: '', irrigator: '' };
+    if (b.statusMesin && eng) upd.mesin = setStatus_(ss, SHEET_MESIN, 'Kode Unit', eng, String(b.statusMesin));
+    if (b.statusIrrigator && irr) upd.irrigator = setStatus_(ss, SHEET_IRR, 'KODE UNIT', irr, String(b.statusIrrigator));
+
+    log_(ss, [new Date(), b.user || '', row, eng, irr, old[cLok - 1], old[cWil - 1], old[cKA - 1], 'TARIK KE BENGKEL', '', '', '', String(b.keterangan || '') + (upd.mesin ? ' | Mesin → ' + upd.mesin : '') + (upd.irrigator ? ' | Irrigator → ' + upd.irrigator : '')]);
+    SpreadsheetApp.flush();
+    return out_({ ok: true, row: row, deleted: true, status: upd });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message || err) });
+  } finally { lock.releaseLock(); }
+}
+
+// ubah kolom "Status" pada baris dengan kode unit tertentu; mengembalikan status baru atau '' bila tidak ditemukan
+function setStatus_(ss, sheetName, keyHeader, code, status) {
+  var sh = ss.getSheetByName(sheetName); if (!sh) return '';
+  var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var ik = headers.map(function (h) { return h.toLowerCase(); }).indexOf(keyHeader.toLowerCase()), is = headers.indexOf('Status');
+  if (ik < 0 || is < 0 || lastRow < 2) return '';
+  var keys = sh.getRange(2, ik + 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < keys.length; i++) if (String(keys[i][0]).trim() === code) { sh.getRange(i + 2, is + 1).setValue(status); return status; }
+  return '';
 }
 
 function log_(ss, rowVals) {
