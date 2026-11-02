@@ -128,3 +128,21 @@ Cukup buka `index.html` di browser, atau jalankan server statis:
 ```bash
 python3 -m http.server 8080
 ```
+
+
+## ✏️ Pindah Unit — tulis-balik ke spreadsheet
+
+Tombol **Pindah Unit** (klik baris di tab *Detail Terpasang* → tombol di atas rincian) mengubah baris unit tersebut langsung di sheet **Detail Terpasang**:
+kolom `Lokasi`, `Wil`, `Sumber Air`, `Kode Air`, `Tanggal` diperbarui dan riwayat (`Pindah dari <lokasi lama> (<kode air lama>) <tanggal>`) ditambahkan di `Keterangan`. Setiap perubahan juga dicatat di sheet `Log Perpindahan` (dibuat otomatis).
+
+**Rekomendasi sumber air** untuk lokasi baru diambil dari sheet *Sumber Air*:
+1. Sumber air yang kolom `Lokasi`/`Kedekatan Lokasi`-nya memuat blok tujuan (mis. `303M`) → *sesuai lokasi*.
+2. Bila tidak ada: sumber air dengan nomor blok sama (`303*`), lalu yang terdekat berdasarkan `Koordinat X/Y` (acuan centroid blok tujuan, atau blok bernomor terdekat di wilayah yang sama) → *terdekat*, lengkap dengan jarak, volume, dan status.
+
+**Pemasangan backend (sekali, oleh pemilik spreadsheet)** — lihat komentar di `apps-script/Code.gs`:
+1. Extensions → Apps Script → tempel `Code.gs` → simpan.
+2. Project Settings → Script Properties → `PIN` = PIN yang diminta dashboard.
+3. Deploy → New deployment → Web app (Execute as *Me*, Who has access *Anyone*) → salin URL `…/exec`.
+4. Tempel URL ke `writeApi.url` di `assets/js/config.js` (berlaku semua pengguna) atau lewat tombol **⚙ Atur URL Web App** (per perangkat).
+
+Keamanan: PIN diverifikasi di Apps Script (tidak ada di kode web); baris dicocokkan ulang berdasarkan Lokasi + Kode Engine + Kode Irigator sebelum ditulis; `LockService` mencegah tulis bersamaan.

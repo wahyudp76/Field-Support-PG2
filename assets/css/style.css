@@ -268,3 +268,36 @@ td.cell-warn{color:#f87171;font-weight:700}
 /* sorot baris hasil navigasi dari modal peringatan */
 tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: background .6s; }
 .kpi .sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* ---------- Pindah Unit (edit.js) ---------- */
+.edit-bar{grid-column:1/-1;display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;border-left:4px solid var(--primary)}
+.edit-bar span{font-size:12.5px;color:var(--muted)}
+.edit-modal{max-width:860px;width:min(860px,96vw)}
+.modal .edit-body{display:block}
+.edit-cur{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12.5px}
+.edit-cur>b{display:block;margin-bottom:8px;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.edit-grid4{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.edit-grid4 div{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-weight:600}
+.edit-grid4 span{display:block;font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.edit-ket{margin-top:8px;color:var(--muted)}
+.edit-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 12px}
+.edit-form label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.edit-form input,.edit-form select{font:inherit;font-size:13.5px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;outline:none}
+.edit-form input:focus,.edit-form select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(240,144,42,.18)}
+.edit-form .wide{grid-column:1/-1}
+.edit-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.edit-actions .grow{flex:1}
+.edit-msg{font-size:12.5px;min-height:16px;color:var(--muted)}
+.edit-msg.ok{color:#16a34a;font-weight:600}.edit-msg.err{color:#ef4444;font-weight:600}
+.edit-sug{background:var(--panel2);border:1px dashed var(--border);border-radius:10px;padding:10px 12px;min-height:60px}
+.edit-sug .empty{padding:14px;text-align:center}
+.sug-h{font-size:12.5px;margin:4px 0 8px;color:var(--text)}
+.sug-h.sub{margin-top:12px}.sug-h span{color:var(--muted);font-weight:400}
+.sug-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.sug{text-align:left;font:inherit;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);transition:.15s}
+.sug:hover{border-color:var(--primary)}
+.sug.on{border-color:var(--primary);box-shadow:0 0 0 2px rgba(240,144,42,.25);background:rgba(240,144,42,.08)}
+.sug b{font-size:13.5px}.sug em{font-style:normal;font-size:10.5px;color:var(--primary);font-weight:700;margin-left:4px}
+.sug div{font-size:11.5px;color:var(--muted);margin-top:2px}.sug small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.sug-warn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:#ef4444;border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;font-weight:600}
+.edit-steps{padding-left:18px;line-height:1.7}.edit-steps code{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}

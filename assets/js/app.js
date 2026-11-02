@@ -462,7 +462,8 @@
     const r = RAW[k].rows.find(x => x._i === i); if (!r) return;
     const title = r['Kode Unit'] || r['KODE UNIT'] || r['Kode Engine'] || r['Kode Baru'] || CONFIG[k].title;
     $('modalTitle').textContent = CONFIG[k].icon + ' ' + title;
-    $('modalBody').innerHTML = RAW[k].headers.map(h => { const fl = r._flag && r._flag[h]; return `<div class="kv" ${fl ? 'style="outline:1px solid #f59e0b"' : ''}><b>${esc(h)}${fl ? ' ⚠️' : ''}</b>${cell(k, h, r[h], r)}${fl ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">${esc(fl.reason)}<br>${esc(fl.suggest)}</div>` : ''}</div>`; }).join('');
+    const editBar = k === 'detail' && window.FSEdit ? `<div class="kv edit-bar"><span>Pindahkan unit ini ke lokasi lain — perubahan langsung ditulis ke sheet <b>Detail Terpasang</b> (butuh PIN).</span><button class="btn btn-primary" type="button" onclick="FSEdit.open(${r._i})">✏️ Pindah Unit</button></div>` : '';
+    $('modalBody').innerHTML = editBar + RAW[k].headers.map(h => { const fl = r._flag && r._flag[h]; return `<div class="kv" ${fl ? 'style="outline:1px solid #f59e0b"' : ''}><b>${esc(h)}${fl ? ' ⚠️' : ''}</b>${cell(k, h, r[h], r)}${fl ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">${esc(fl.reason)}<br>${esc(fl.suggest)}</div>` : ''}</div>`; }).join('');
     $('modal').classList.add('show');
   }
   window.closeModal = () => $('modal').classList.remove('show');
@@ -1126,6 +1127,9 @@
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; const b = $('installBtn'); if (b) b.style.display = ''; });
   $('installBtn')?.addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('installBtn').style.display = 'none'; });
   window.addEventListener('appinstalled', () => { toast('Aplikasi berhasil dipasang ✔'); const b = $('installBtn'); if (b) b.style.display = 'none'; });
+
+  /* ---------- jembatan untuk modul edit (edit.js) ---------- */
+  window.__FS = { RAW, loadData, toast, esc, fmt, refreshRow: (k, r) => { r._s = RAW[k].headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); dirty[k] = true; closeModal(); renderView(k); } };
 
   /* ---------- Service worker: notifikasi versi baru ---------- */
   if ('serviceWorker' in navigator) {
