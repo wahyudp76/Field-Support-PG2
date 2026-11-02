@@ -36,7 +36,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 3, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 4, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move) atau ?action=ping' });
 }
@@ -107,14 +107,19 @@ function move_(b) {
 
     sh.getRange(row, cLok).setValue(lokasi);
     if (to.wil) sh.getRange(row, cWil).setValue(String(to.wil).trim().toUpperCase());
-    if (to.sumberAir !== undefined) sh.getRange(row, cSA).setValue(String(to.sumberAir || '').trim());
-    if (to.kodeAir !== undefined) sh.getRange(row, cKA).setValue(String(to.kodeAir || '').trim().toUpperCase());
     if (tgl) sh.getRange(row, cTgl).setValue(tgl);
     sh.getRange(row, cKet).setValue(ket);
 
-    log_(ss, [new Date(), b.user || '', row, old[cEng - 1], old[cIrr - 1], oldLok, old[cWil - 1], oldKA, lokasi, to.wil || '', to.kodeAir || '', to.sumberAir || '', to.keterangan || '']);
+    // Kode Air & Sumber Air: PERTAHANKAN RUMUS bila ada (atau pulihkan dari baris lain yang masih berumus).
+    // Bila rumus menghasilkan kode untuk lokasi baru → pakai hasil rumus. Bila kosong/#N/A (lokasi belum
+    // punya sumber air di sheet Sumber Air) → tulis nilai pilihan pengguna (kode terdekat) sebagai teks.
+    var kaMode = applyFormulaOrValue_(sh, row, cKA, String(to.kodeAir || '').trim().toUpperCase());
+    var saMode = applyFormulaOrValue_(sh, row, cSA, String(to.sumberAir || '').trim());
+    var kaFinal = String(sh.getRange(row, cKA).getDisplayValue()).trim(), saFinal = String(sh.getRange(row, cSA).getDisplayValue()).trim();
+
+    log_(ss, [new Date(), b.user || '', row, old[cEng - 1], old[cIrr - 1], oldLok, old[cWil - 1], oldKA, lokasi, to.wil || '', kaFinal + (kaMode === 'formula' ? ' (rumus)' : ''), saFinal, to.keterangan || '']);
     SpreadsheetApp.flush();
-    return out_({ ok: true, row: row, lokasi: lokasi, keterangan: ket });
+    return out_({ ok: true, row: row, lokasi: lokasi, keterangan: ket, kodeAir: kaFinal, kodeAirMode: kaMode, sumberAir: saFinal, sumberAirMode: saMode });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }
@@ -167,6 +172,40 @@ function setStatus_(ss, sheetName, keyHeader, code, status) {
   var keys = sh.getRange(2, ik + 1, lastRow - 1, 1).getValues();
   for (var i = 0; i < keys.length; i++) if (String(keys[i][0]).trim() === code) { sh.getRange(i + 2, is + 1).setValue(status); return status; }
   return '';
+}
+
+/**
+ * Pastikan sel (row,col) berumus bila kolom tersebut memang memakai rumus di baris lain, lalu evaluasi:
+ *  - rumus menghasilkan nilai (bukan kosong / error) → biarkan rumus ("formula")
+ *  - rumus kosong/error atau kolom memang tidak berumus → tulis nilai teks ("value") bila ada; kembalikan "empty" bila nilai kosong
+ */
+function applyFormulaOrValue_(sh, row, col, value) {
+  var cell = sh.getRange(row, col);
+  if (!cell.getFormula()) {
+    var tpl = findFormulaCell_(sh, row, col);
+    if (tpl) tpl.copyTo(cell, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false); // referensi relatif ikut bergeser
+  }
+  if (cell.getFormula()) {
+    SpreadsheetApp.flush();
+    var shown = String(cell.getDisplayValue()).trim();
+    if (shown && !/^#(N\/A|REF!|VALUE!|NAME\?|ERROR!|DIV\/0!|NUM!)/.test(shown)) return 'formula';
+    if (!value) return 'empty-formula'; // tidak ada pengganti: biarkan rumus (kosong) agar terlihat perlu dilengkapi
+  }
+  if (value) { cell.setValue(value); return 'value'; }
+  if (!cell.getFormula()) cell.setValue('');
+  return 'empty';
+}
+
+// cari sel berumus terdekat pada kolom yang sama (baris di atas lalu di bawah) sebagai templat
+function findFormulaCell_(sh, row, col) {
+  var lastRow = sh.getLastRow(), n = Math.max(row - 2, lastRow - row);
+  var formulas = sh.getRange(2, col, lastRow - 1, 1).getFormulas();
+  for (var d = 1; d <= n; d++) {
+    var up = row - d, down = row + d;
+    if (up >= 2 && formulas[up - 2][0]) return sh.getRange(up, col);
+    if (down <= lastRow && formulas[down - 2][0]) return sh.getRange(down, col);
+  }
+  return null;
 }
 
 function log_(ss, rowVals) {

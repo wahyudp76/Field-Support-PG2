@@ -133,7 +133,7 @@ python3 -m http.server 8080
 ## ✏️ Pindah Unit — tulis-balik ke spreadsheet
 
 Tombol **Pindah Unit** (klik baris di tab *Detail Terpasang* → tombol di atas rincian) mengubah baris unit tersebut langsung di sheet **Detail Terpasang**:
-kolom `Lokasi`, `Wil`, `Sumber Air`, `Kode Air`, `Tanggal` diperbarui dan riwayat (`Pindah dari <lokasi lama> (<kode air lama>) <tanggal>`) ditambahkan di `Keterangan`. Setiap perubahan juga dicatat di sheet `Log Perpindahan` (dibuat otomatis).
+kolom `Lokasi`, `Wil`, `Tanggal` diperbarui; `Kode Air` & `Sumber Air` **mempertahankan rumus** sheet bila kolom itu berumus (rumus dipulihkan dari baris lain bila sebelumnya tertimpa) — hanya jika rumus tidak menghasilkan kode (lokasi belum punya sumber air) nilai pilihan pengguna (kode terdekat) ditulis sebagai teks dan riwayat (`Pindah dari <lokasi lama> (<kode air lama>) <tanggal>`) ditambahkan di `Keterangan`. Setiap perubahan juga dicatat di sheet `Log Perpindahan` (dibuat otomatis).
 
 **Rekomendasi sumber air** untuk lokasi baru diambil dari sheet *Sumber Air*:
 1. Sumber air yang kolom `Lokasi`/`Kedekatan Lokasi`-nya memuat blok tujuan (mis. `303M`) → *sesuai lokasi*.

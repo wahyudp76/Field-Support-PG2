@@ -130,8 +130,8 @@
     if (!lok) { box.innerHTML = '<div class="empty">Ketik lokasi baru untuk melihat rekomendasi sumber air.</div>'; return; }
     const g = suggest(lok, wil);
     let h = '';
-    if (g.exact.length) h += `<div class="sug-h">✅ Sumber air yang melayani blok <b>${esc(lok)}</b></div><div class="sug-row">${g.exact.map(s => card(s, 'sesuai lokasi')).join('')}</div>`;
-    else h += `<div class="sug-h">ℹ️ Belum ada sumber air berkode untuk blok <b>${esc(lok)}</b> di sheet Sumber Air — pilih yang terdekat:</div>`;
+    if (g.exact.length) h += `<div class="sug-h">✅ Sumber air yang melayani blok <b>${esc(lok)}</b> <span>— rumus Kode Air di sheet akan tetap dipakai (otomatis)</span></div><div class="sug-row">${g.exact.map(s => card(s, 'sesuai lokasi')).join('')}</div>`;
+    else h += `<div class="sug-h">ℹ️ Belum ada sumber air berkode untuk blok <b>${esc(lok)}</b> di sheet Sumber Air — pilih yang terdekat <span>(ditulis sebagai teks, tanpa rumus)</span>:</div>`;
     if (g.near.length) h += `<div class="sug-h sub">📍 Terdekat${g.note ? ' <span>(' + esc(g.note) + ')</span>' : ''}</div><div class="sug-row">${g.near.map(s => card(s, s.nums.has(parseLok(lok).num) ? 'blok sama' : 'terdekat')).join('')}</div>`;
     if (!g.exact.length && !g.near.length) h += `<div class="empty">${esc(g.note || 'Tidak ada kandidat')}</div>`;
     const used = (F().RAW.detail.rows || []).filter(x => x !== r && x['Lokasi'] === lok);
@@ -165,9 +165,11 @@
       if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
       localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('ed-user').value.trim());
       // perbarui tampilan lokal segera, lalu sinkron ulang dari sheet
-      Object.assign(r, { Lokasi: lok, Wil: $('ed-wil').value, 'Sumber Air': $('ed-sa').value || r['Sumber Air'], 'Kode Air': ka, Tanggal: $('ed-tgl').value || r['Tanggal'], Keterangan: j.keterangan || r['Keterangan'] });
+      const kaFinal = j.kodeAir !== undefined ? j.kodeAir : ka, saFinal = j.sumberAir !== undefined && j.sumberAir !== '' ? j.sumberAir : ($('ed-sa').value || r['Sumber Air']);
+      Object.assign(r, { Lokasi: lok, Wil: $('ed-wil').value, 'Sumber Air': saFinal, 'Kode Air': kaFinal, Tanggal: $('ed-tgl').value || r['Tanggal'], Keterangan: j.keterangan || r['Keterangan'] });
       if (F().refreshRow) F().refreshRow('detail', r);
-      msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Tersimpan di baris ' + j.row + '. Menyinkronkan ulang…';
+      const how = j.kodeAirMode === 'formula' ? 'Kode Air ' + kaFinal + ' dari rumus sheet' + (ka && ka !== kaFinal ? ' (pilihan ' + ka + ' tidak dipakai karena lokasi sudah punya sumber air)' : '') : j.kodeAirMode === 'value' ? 'Kode Air ' + kaFinal + ' ditulis sebagai teks (lokasi belum punya sumber air di sheet)' : j.kodeAirMode ? 'Kode Air kosong' : '';
+      msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Tersimpan di baris ' + j.row + (how ? ' · ' + how : '') + '. Menyinkronkan ulang…';
       toast('Unit ' + (r['Kode Engine'] || '') + ' dipindah ke ' + lok + ' ✔');
       setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1200);
     } catch (e) {
