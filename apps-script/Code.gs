@@ -24,13 +24,19 @@
  * =====================================================================
  */
 
+var SPREADSHEET_ID = '1WbGTDqC0Anh6O54twsJfiBiWcTri7FHyQjXIFrOoLz4'; // dipakai bila project ini TIDAK terikat ke spreadsheet
 var SHEET_DETAIL = 'Detail Terpasang';
 var SHEET_LOG = 'Log Perpindahan';      // dibuat otomatis bila belum ada
 var MAX_HISTORY = 400;                  // panjang maksimal kolom Keterangan
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
-  if (p.action === 'ping') return out_({ ok: true, app: 'FS PG2 writer', version: 1, time: new Date().toISOString() });
+  if (p.action === 'ping') {
+    var info = {};
+    try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
+    info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
+    return out_({ ok: true, app: 'FS PG2 writer', version: 2, time: new Date().toISOString(), info: info });
+  }
   return out_({ ok: false, error: 'Gunakan POST (action: move) atau ?action=ping' });
 }
 
@@ -53,7 +59,7 @@ function move_(b) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(SHEET_DETAIL);
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID), sh = ss.getSheetByName(SHEET_DETAIL);
     if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_DETAIL + '" tidak ditemukan' });
 
     var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
