@@ -209,7 +209,7 @@
         localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('wd-user').value.trim());
         if (F().removeRow) F().removeRow('detail', r);
         const st = [j.status && j.status.mesin ? 'Mesin → ' + j.status.mesin : '', j.status && j.status.irrigator ? 'Irrigator → ' + j.status.irrigator : ''].filter(Boolean).join(', ');
-        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Baris ' + j.row + ' dihapus' + (st ? ' · ' + st : '') + '. Menyinkronkan ulang…';
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Baris ' + j.row + ' dihapus' + (st ? ' · ' + st : '') + (j.noFixed ? ' · rumus kolom No diperbaiki (' + j.noFixed + ' sel)' : '') + '. Menyinkronkan ulang…';
         toast('Unit ' + (r['Kode Engine'] || r['Lokasi']) + ' ditarik ke bengkel ✔');
         setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1200);
       } catch (err) {

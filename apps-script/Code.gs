@@ -36,7 +36,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 4, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 5, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move) atau ?action=ping' });
 }
@@ -147,7 +147,11 @@ function withdraw_(b) {
     }
     var old = sh.getRange(row, 1, 1, lastCol).getValues()[0];
     var eng = String(old[cEng - 1]).trim(), irr = String(old[cIrr - 1]).trim();
+    // kolom "No" biasanya rumus berantai (=A9+1). Simpan pola R1C1-nya sebelum hapus, lalu pulihkan sel yang jadi #REF!.
+    var cNo = headers.indexOf('No') + 1, noFix = 0;
+    var noPattern = cNo ? captureNoPattern_(sh, row, cNo, lastRow) : '';
     sh.deleteRow(row);
+    if (cNo) noFix = repairNoColumn_(sh, row, cNo, noPattern);
 
     // opsional: perbarui kolom Status unit di sheet Mesin / Irrigator (mis. "Standby" / "Rusak")
     var upd = { mesin: '', irrigator: '' };
@@ -156,10 +160,36 @@ function withdraw_(b) {
 
     log_(ss, [new Date(), b.user || '', row, eng, irr, old[cLok - 1], old[cWil - 1], old[cKA - 1], 'TARIK KE BENGKEL', '', '', '', String(b.keterangan || '') + (upd.mesin ? ' | Mesin → ' + upd.mesin : '') + (upd.irrigator ? ' | Irrigator → ' + upd.irrigator : '')]);
     SpreadsheetApp.flush();
-    return out_({ ok: true, row: row, deleted: true, status: upd });
+    return out_({ ok: true, row: row, deleted: true, status: upd, noFixed: noFix });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }
+}
+
+// ambil pola rumus relatif (R1C1) kolom No: dari baris yang dihapus, atau baris lain yang berumus
+function captureNoPattern_(sh, row, cNo, lastRow) {
+  var f = sh.getRange(row, cNo).getFormulaR1C1();
+  if (f) return f;
+  var cand = [row - 1, row + 1, row - 2, row + 2];
+  for (var i = 0; i < cand.length; i++) if (cand[i] >= 3 && cand[i] <= lastRow) { f = sh.getRange(cand[i], cNo).getFormulaR1C1(); if (f) return f; }
+  return '';
+}
+
+// setelah deleteRow: setiap sel kolom No yang error (#REF!) atau berisi "#REF" di rumusnya diisi ulang dengan pola R1C1; baris 2 (data pertama) diberi angka 1
+function repairNoColumn_(sh, row, cNo, pattern) {
+  var lastRow = sh.getLastRow(), fixed = 0; if (lastRow < 2) return 0;
+  var rng = sh.getRange(2, cNo, lastRow - 1, 1), fs = rng.getFormulas(), vs = rng.getDisplayValues();
+  for (var i = 0; i < fs.length; i++) {
+    var r = i + 2, broken = /#REF/i.test(fs[i][0]) || /^#/.test(String(vs[i][0]));
+    if (!broken) continue;
+    if (r === 2) sh.getRange(r, cNo).setValue(1);
+    else if (pattern) sh.getRange(r, cNo).setFormulaR1C1(pattern);
+    else sh.getRange(r, cNo).setFormulaR1C1('=R[-1]C+1');
+    fixed++;
+  }
+  // bila baris yang dihapus adalah baris data pertama dan sel baru di baris 2 masih rumus ke header, paksa angka 1
+  if (row === 2 && lastRow >= 2 && sh.getRange(2, cNo).getFormula()) { sh.getRange(2, cNo).setValue(1); fixed++; }
+  return fixed;
 }
 
 // ubah kolom "Status" pada baris dengan kode unit tertentu; mengembalikan status baru atau '' bila tidak ditemukan

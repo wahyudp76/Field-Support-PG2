@@ -145,6 +145,6 @@ kolom `Lokasi`, `Wil`, `Tanggal` diperbarui; `Kode Air` & `Sumber Air` **mempert
 3. Deploy → New deployment → Web app (Execute as *Me*, Who has access *Anyone*) → salin URL `…/exec`.
 4. Tempel URL ke `writeApi.url` di `assets/js/config.js` (berlaku semua pengguna) atau lewat tombol **⚙ Atur URL Web App** (per perangkat).
 
-**Tarik ke Bengkel** (tombol merah di form yang sama): menghapus baris unit dari *Detail Terpasang* (dengan konfirmasi), opsional mengubah kolom `Status` unit di sheet *Mesin* / *Irrigator* (Standby / Rusak / Perbaikan / tidak diubah), dan mencatatnya di `Log Perpindahan` dengan penanda `TARIK KE BENGKEL`.
+**Tarik ke Bengkel** (tombol merah di form yang sama): menghapus baris unit dari *Detail Terpasang* (dengan konfirmasi), opsional mengubah kolom `Status` unit di sheet *Mesin* / *Irrigator* (Standby / Rusak / Perbaikan / tidak diubah), dan mencatatnya di `Log Perpindahan` dengan penanda `TARIK KE BENGKEL`. Kolom `No` yang berumus berantai (mis. `=A9+1`) otomatis diperbaiki setelah baris dihapus: pola rumus (R1C1) disimpan sebelum hapus dan sel yang menjadi `#REF!` diisi ulang dengan pola yang sama (baris data pertama diberi angka 1).
 
 Keamanan: PIN diverifikasi di Apps Script (tidak ada di kode web); baris dicocokkan ulang berdasarkan Lokasi + Kode Engine + Kode Irigator sebelum ditulis; `LockService` mencegah tulis bersamaan.
