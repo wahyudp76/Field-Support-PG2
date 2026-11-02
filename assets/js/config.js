@@ -30,7 +30,7 @@ window.APP_CONFIG = {
 
   // Tulis-balik ke spreadsheet (tombol "Pindah Unit"): URL Web App Apps Script dari apps-script/Code.gs.
   // Kosong = tiap perangkat mengisi URL sendiri lewat tombol ⚙ di form. Isi di sini agar berlaku untuk semua pengguna.
-  writeApi: { url: '' },
+  writeApi: { url: 'https://script.google.com/macros/s/AKfycbyPNczhzDTyNHYCtQN66kfLWzRFc6WNax_65_Fwc17aeLXk8CIByYuU9MIfC87ghgF_UQ/exec' },
 
   // Komoditi yang memakai irigasi tetes (drip) → tidak memakai irrigator, sehingga Kode Irigator kosong adalah WAJAR.
   // Dicocokkan (tanpa membedakan huruf besar/kecil) dengan kolom Wil / Komoditi pada Detail Terpasang.
