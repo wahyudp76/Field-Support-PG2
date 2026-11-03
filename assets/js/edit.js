@@ -94,7 +94,7 @@
     $('editTitle').textContent = '✏️ Pindah Unit — ' + (r['Kode Engine'] || r['Lokasi']);
     $('editBody').innerHTML = `
       <div class="edit-cur"><b>Posisi sekarang</b>
-        <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div><div><span>Sumber Air</span>${esc(r['Sumber Air'] || '–')}</div><div><span>Kode Air</span>${esc(r['Kode Air'] || '–')}</div><div><span>Tanggal</span>${esc(r['Tanggal'] || '–')}</div><div><span>Baris sheet</span>${r._i + 2}</div></div>
+        <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div><div><span>Sumber Air</span>${esc(r['Sumber Air'] || '–')}</div><div><span>Kode Air</span>${esc(r['Kode Air'] || '–')}</div><div><span>Tanggal</span>${esc(r['Tanggal'] || '–')}</div><div><span>Baris sheet</span>${(r._row || r._i + 2)}</div></div>
         ${r['Keterangan'] ? `<div class="edit-ket">📝 ${esc(r['Keterangan'])}</div>` : ''}</div>
       <form id="editForm" class="edit-form" autocomplete="off">
         <label>Lokasi baru <input id="ed-lok" required placeholder="mis. 303M / 109D1" value=""></label>
@@ -135,7 +135,7 @@
     if (g.near.length) h += `<div class="sug-h sub">📍 Terdekat${g.note ? ' <span>(' + esc(g.note) + ')</span>' : ''}</div><div class="sug-row">${g.near.map(s => card(s, s.nums.has(parseLok(lok).num) ? 'blok sama' : 'terdekat')).join('')}</div>`;
     if (!g.exact.length && !g.near.length) h += `<div class="empty">${esc(g.note || 'Tidak ada kandidat')}</div>`;
     const used = (F().RAW.detail.rows || []).filter(x => (!r || x !== r) && x['Lokasi'] === lok);
-    if (used.length) h = `<div class="sug-warn">⚠️ Lokasi ${esc(lok)} sudah dipakai unit lain: ${used.map(x => esc(x['Kode Engine'] || ('baris ' + (x._i + 2)))).join(', ')}</div>` + h;
+    if (used.length) h = `<div class="sug-warn">⚠️ Lokasi ${esc(lok)} sudah dipakai unit lain: ${used.map(x => esc(x['Kode Engine'] || ('baris ' + ((x._row || x._i + 2))))).join(', ')}</div>` + h;
     box.innerHTML = h;
   }
 
@@ -156,7 +156,7 @@
     const ka = $('ed-ka').value.trim().toUpperCase(), ix = index();
     if (ka && ix && !ix.list.some(s => s.kode === ka) && !confirm('Kode Air "' + ka + '" tidak ada di sheet Sumber Air. Tetap simpan?')) return;
     if (!ka && !confirm('Kode Air kosong — unit akan tercatat tanpa sumber air. Lanjutkan?')) return;
-    const body = { action: 'move', pin, user: $('ed-user').value.trim(), row: r._i + 2,
+    const body = { action: 'move', pin, user: $('ed-user').value.trim(), row: (r._row || r._i + 2),
       from: { lokasi: r['Lokasi'] || '', kodeEngine: r['Kode Engine'] || '', kodeIrigator: r['Kode Irigator'] || '' },
       to: { lokasi: lok, wil: $('ed-wil').value, tanggal: $('ed-tgl').value, sumberAir: $('ed-sa').value, kodeAir: ka, keterangan: $('ed-ket').value.trim() } };
     btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menyimpan ke spreadsheet…';
@@ -183,7 +183,7 @@
     $('editTitle').textContent = '🔧 Tarik ke Bengkel — ' + (r['Kode Engine'] || r['Lokasi']);
     $('editBody').innerHTML = `
       <div class="edit-cur"><b>Unit yang ditarik</b>
-        <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div><div><span>Kode Air</span>${esc(r['Kode Air'] || '–')}</div><div><span>Baris sheet</span>${r._i + 2}</div></div></div>
+        <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div><div><span>Kode Air</span>${esc(r['Kode Air'] || '–')}</div><div><span>Baris sheet</span>${(r._row || r._i + 2)}</div></div></div>
       <div class="sug-warn">⚠️ Baris unit ini akan <b>DIHAPUS</b> dari sheet <b>Detail Terpasang</b> (tidak bisa dibatalkan dari dashboard). Riwayatnya tetap tercatat di sheet <b>Log Perpindahan</b>.</div>
       <form id="wdForm" class="edit-form" autocomplete="off">
         <label>Status baru di sheet Mesin ${r['Kode Engine'] ? '(' + esc(r['Kode Engine']) + ')' : ''}<select id="wd-sm" ${r['Kode Engine'] ? '' : 'disabled'}>${stOpts.map(o => `<option value="${o}" ${o === 'Standby' && r['Kode Engine'] ? 'selected' : ''}>${o || '(tidak diubah)'}</option>`).join('')}</select></label>
@@ -203,7 +203,7 @@
       if (!pin) { msg.textContent = 'PIN wajib diisi.'; msg.className = 'wide edit-msg err'; return; }
       btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menghapus baris di spreadsheet…';
       try {
-        const j = await post({ action: 'withdraw', pin, user: $('wd-user').value.trim(), row: r._i + 2, from: { lokasi: r['Lokasi'] || '', kodeEngine: r['Kode Engine'] || '', kodeIrigator: r['Kode Irigator'] || '' },
+        const j = await post({ action: 'withdraw', pin, user: $('wd-user').value.trim(), row: (r._row || r._i + 2), from: { lokasi: r['Lokasi'] || '', kodeEngine: r['Kode Engine'] || '', kodeIrigator: r['Kode Irigator'] || '' },
           statusMesin: $('wd-sm').value, statusIrrigator: $('wd-si').value, keterangan: $('wd-ket').value.trim() });
         if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
         localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('wd-user').value.trim());

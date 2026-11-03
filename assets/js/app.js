@@ -643,8 +643,8 @@
     // Cek silang total di sheet vs penjumlahan komponen → peringatan kualitas data
     const issues = [];
     places.forEach(p => {
-      jenis.forEach(j => { const x = p.jenis[j.name]; if (!isNaN(x.totalSheet) && x.totalSheet !== x.total) issues.push({ row: p.row._i + 2, col: j.totalCol, value: p.row[j.totalCol], level: 'warn', reason: `Total ${j.name} di sheet (${fmt(x.totalSheet)}) ≠ jumlah komponen (${fmt(x.total)}) pada ${p.name}`, suggest: 'Periksa rumus/isian kolom komponen; dashboard memakai jumlah komponen' }); });
-      if (grandCol && !isNaN(p.totalSheet) && p.totalSheet !== p.total) issues.push({ row: p.row._i + 2, col: grandCol, value: p.row[grandCol], level: 'warn', reason: `Grand Total di sheet (${fmt(p.totalSheet)}) ≠ jumlah komponen (${fmt(p.total)}) pada ${p.name}`, suggest: 'Periksa rumus Grand Total; dashboard memakai jumlah komponen' });
+      jenis.forEach(j => { const x = p.jenis[j.name]; if (!isNaN(x.totalSheet) && x.totalSheet !== x.total) issues.push({ row: (p.row._row || p.row._i + 2), col: j.totalCol, value: p.row[j.totalCol], level: 'warn', reason: `Total ${j.name} di sheet (${fmt(x.totalSheet)}) ≠ jumlah komponen (${fmt(x.total)}) pada ${p.name}`, suggest: 'Periksa rumus/isian kolom komponen; dashboard memakai jumlah komponen' }); });
+      if (grandCol && !isNaN(p.totalSheet) && p.totalSheet !== p.total) issues.push({ row: (p.row._row || p.row._i + 2), col: grandCol, value: p.row[grandCol], level: 'warn', reason: `Grand Total di sheet (${fmt(p.totalSheet)}) ≠ jumlah komponen (${fmt(p.total)}) pada ${p.name}`, suggest: 'Periksa rumus Grand Total; dashboard memakai jumlah komponen' });
     });
     if (sh && !sh.error) { sh.issues = (sh.issues || []).filter(x => !x._calc); issues.forEach(x => { x._calc = true; x.id = x.row; x.sheet = sh.name; sh.issues.push(x); }); }
     pipaCache = { src: sh, placeCol, grandCol, jenis, places, byJenis, cond, grand, graded, gradedJenis, ungradedJenis, ok: !!(sh && !sh.error && rows.length && jenis.length) };
@@ -776,15 +776,15 @@
     // Pemeriksaan kualitas: kode duplikat, kode placeholder 0000, prefix kode ≠ mayoritas jenis, volume jauh di bawah median aktivitas
     const issues = [];
     const byKode = new Map(); pRows.forEach(r => { const k = (r[pKode] || '').trim(); if (!k) return; byKode.set(k, (byKode.get(k) || []).concat(r)); });
-    byKode.forEach((rs, k) => { if (/0{4}$/.test(k)) rs.forEach(r => issues.push({ row: r._i + 2, col: pKode, value: k, level: 'info', reason: 'Kode unit placeholder (…0000) — unit belum diberi nomor', suggest: 'Isi kode unit sebenarnya' })); else if (rs.length > 1) rs.forEach(r => issues.push({ row: r._i + 2, col: pKode, value: k, level: 'warn', reason: 'Kode unit duplikat (' + rs.length + '× : ' + rs.map(x => x[pWil]).join(', ') + ')', suggest: 'Pastikan satu kode untuk satu unit' })); });
+    byKode.forEach((rs, k) => { if (/0{4}$/.test(k)) rs.forEach(r => issues.push({ row: (r._row || r._i + 2), col: pKode, value: k, level: 'info', reason: 'Kode unit placeholder (…0000) — unit belum diberi nomor', suggest: 'Isi kode unit sebenarnya' })); else if (rs.length > 1) rs.forEach(r => issues.push({ row: (r._row || r._i + 2), col: pKode, value: k, level: 'warn', reason: 'Kode unit duplikat (' + rs.length + '× : ' + rs.map(x => x[pWil]).join(', ') + ')', suggest: 'Pastikan satu kode untuk satu unit' })); });
     const pref = {}; pRows.forEach(r => { const m = (r[pKode] || '').match(/^[A-Z]+/); if (!m || !r[pJenis]) return; (pref[r[pJenis]] = pref[r[pJenis]] || {})[m[0]] = (pref[r[pJenis]][m[0]] || 0) + 1; });
     const major = {}; Object.keys(pref).forEach(j => { major[j] = Object.entries(pref[j]).sort((a, b) => b[1] - a[1])[0][0]; });
     // awalan kode yang menjadi mayoritas pada jenis lain → kemungkinan salah jenis / salah kode (info)
     const owner = {}; Object.keys(major).forEach(j => { const p = major[j]; if (!owner[p] || pref[j][p] > pref[owner[p]][p]) owner[p] = j; });
-    pRows.forEach(r => { const m = (r[pKode] || '').match(/^[A-Z]+/); if (!m || !r[pJenis] || /0{4}$/.test(r[pKode])) return; const o = owner[m[0]]; if (o && o !== r[pJenis]) issues.push({ row: r._i + 2, col: pKode, value: r[pKode], level: 'info', reason: 'Awalan kode "' + m[0] + '" umumnya dipakai jenis ' + o + ', tetapi unit ini tercatat sebagai ' + r[pJenis], suggest: 'Periksa apakah jenis unit atau kode yang keliru' }); });
+    pRows.forEach(r => { const m = (r[pKode] || '').match(/^[A-Z]+/); if (!m || !r[pJenis] || /0{4}$/.test(r[pKode])) return; const o = owner[m[0]]; if (o && o !== r[pJenis]) issues.push({ row: (r._row || r._i + 2), col: pKode, value: r[pKode], level: 'info', reason: 'Awalan kode "' + m[0] + '" umumnya dipakai jenis ' + o + ', tetapi unit ini tercatat sebagai ' + r[pJenis], suggest: 'Periksa apakah jenis unit atau kode yang keliru' }); });
     const medAkt = {}; akt.forEach(a => { const v = aRows.filter(r => r[aAkt] === a).map(r => numv(r, aVol)).filter(n => !isNaN(n) && n > 0).sort((x, y) => x - y); medAkt[a] = v.length ? v[Math.floor(v.length / 2)] : 0; });
-    aRows.forEach(r => { const n = numv(r, aVol); if (!isNaN(n) && n > 0 && medAkt[r[aAkt]] && n < medAkt[r[aAkt]] * 0.4) issues.push({ row: r._i + 2, col: aVol, value: r[aVol], level: 'info', reason: 'Volume jauh di bawah median aktivitas ' + r[aAkt] + ' (' + fmt(medAkt[r[aAkt]]) + ') — mungkin salah ketik', suggest: 'Periksa, mis. seharusnya ' + fmt(n * 10) + '?' }); });
-    const dupA = new Map(); aRows.forEach(r => { const k = (r[aKode] || '').trim(); if (k) dupA.set(k, (dupA.get(k) || 0) + 1); }); aRows.forEach(r => { if (dupA.get((r[aKode] || '').trim()) > 1) issues.push({ row: r._i + 2, col: aKode, value: r[aKode], level: 'warn', reason: 'Kode tangki duplikat', suggest: 'Pastikan satu kode untuk satu tangki' }); });
+    aRows.forEach(r => { const n = numv(r, aVol); if (!isNaN(n) && n > 0 && medAkt[r[aAkt]] && n < medAkt[r[aAkt]] * 0.4) issues.push({ row: (r._row || r._i + 2), col: aVol, value: r[aVol], level: 'info', reason: 'Volume jauh di bawah median aktivitas ' + r[aAkt] + ' (' + fmt(medAkt[r[aAkt]]) + ') — mungkin salah ketik', suggest: 'Periksa, mis. seharusnya ' + fmt(n * 10) + '?' }); });
+    const dupA = new Map(); aRows.forEach(r => { const k = (r[aKode] || '').trim(); if (k) dupA.set(k, (dupA.get(k) || 0) + 1); }); aRows.forEach(r => { if (dupA.get((r[aKode] || '').trim()) > 1) issues.push({ row: (r._row || r._i + 2), col: aKode, value: r[aKode], level: 'warn', reason: 'Kode tangki duplikat', suggest: 'Pastikan satu kode untuk satu tangki' }); });
     if (P && !P.error) { P.issues = (P.issues || []).filter(x => !x._calc); issues.filter(x => x.col === pKode || x.col === pJenis).forEach(x => { x._calc = true; x.sheet = P.name + ' › tb_pendukung'; x.id = x.value; P.issues.push(x); }); }
     if (A && !A.error) { A.issues = (A.issues || []).filter(x => !x._calc); issues.filter(x => x.col === aVol || x.col === aKode).forEach(x => { x._calc = true; x.sheet = A.name + ' › tb_aktwilayah'; x.id = x.value; A.issues.push(x); }); }
     pendCache = { P, A, pRows, aRows, pWil, pJenis, pKode, aWil, aAkt, aKode, aVol, wil, jenis, akt, ok: !!(P && !P.error && pRows.length), okA: !!(A && !A.error && aRows.length) };
@@ -976,8 +976,8 @@
     if (!D || D.error || !D.rows.length) return;
     const h = D.headers, K = n => altKey(h, n) || n;
     const cLok = K('Lokasi'), cEng = K('Kode Engine'), cIrr = K('Kode Irigator'), cSrc = K('Sumber Air'), cAir = K('Kode Air'), cWil = K('Wil');
-    const add = (sh, r, col, chk) => { const x = { row: r._i + 2, col, value: r[col] || '(kosong)', id: r[cLok] || r[col] || '', sheet: sh.name, _rel: true, _calc: true, ...chk }; sh.issues.push(x); (r._flag || (r._flag = {}))[col] = { ...chk, _rel: true }; };
-    const idLabel = r => (r[cLok] ? 'titik ' + r[cLok] : 'baris ' + (r._i + 2)) + (r[cWil] ? ' (' + r[cWil] + ')' : '');
+    const add = (sh, r, col, chk) => { const x = { row: (r._row || r._i + 2), col, value: r[col] || '(kosong)', id: r[cLok] || r[col] || '', sheet: sh.name, _rel: true, _calc: true, ...chk }; sh.issues.push(x); (r._flag || (r._flag = {}))[col] = { ...chk, _rel: true }; };
+    const idLabel = r => (r[cLok] ? 'titik ' + r[cLok] : 'baris ' + ((r._row || r._i + 2))) + (r[cWil] ? ' (' + r[cWil] + ')' : '');
     const v = (r, c) => String(r[c] || '').trim();
     // kunci referensi dari sheet lain
     const mKey = M && !M.error ? (altKey(M.headers, 'Kode Unit') || 'Kode Unit') : null, mStat = M && !M.error ? (altKey(M.headers, 'Status') || 'Status') : null;
@@ -1003,7 +1003,7 @@
       // pemakaian ganda
       // engine/irrigator dipakai >1 baris: bedakan "baris duplikat" (lokasi sama) dari "dipakai di titik berbeda"
       const dupMsg = (what, code, list) => {
-        const loks = list.map(x => x[cLok] || ('baris ' + (x._i + 2))), brs = list.map(x => 'baris ' + (x._i + 2)).join(' & ');
+        const loks = list.map(x => x[cLok] || ('baris ' + ((x._row || x._i + 2)))), brs = list.map(x => 'baris ' + ((x._row || x._i + 2))).join(' & ');
         return new Set(loks).size === 1
           ? { reason: 'Baris duplikat: titik ' + loks[0] + ' dengan ' + what + ' ' + code + ' tercatat ' + list.length + ' kali (' + brs + ')', suggest: 'Hapus salah satu baris ganda di sheet Detail Terpasang' }
           : { reason: what.charAt(0).toUpperCase() + what.slice(1) + ' ' + code + ' dipakai di ' + list.length + ' titik irigasi: ' + loks.join(', ') + ' (' + brs + ')', suggest: 'Satu ' + what + ' hanya boleh terpasang di satu titik — periksa kode yang salah ketik atau baris lama yang belum dihapus' };
@@ -1020,8 +1020,8 @@
     // lokasi tercatat lebih dari sekali (bisa sah: 2 engine di 1 lokasi) → info
     useLok.forEach((rs, l) => { if (rs.length > 1) rs.forEach(r => add(D, r, cLok, { level: 'info', reason: 'Lokasi ' + l + ' tercatat ' + rs.length + ' kali (engine: ' + rs.map(x => x[cEng] || '-').join(', ') + ')', suggest: 'Pastikan memang ada ' + rs.length + ' unit di lokasi ini, bukan baris ganda' })); });
     // unit berstatus Terpasang di sheet master tetapi tidak tercatat di titik manapun
-    if (mKey && mStat) M.rows.forEach(r => { const k = v(r, mKey); if (k && /terpasang/i.test(v(r, mStat)) && !useEng.has(k)) { M.issues.push({ row: r._i + 2, col: mStat, value: r[mStat], id: k, sheet: M.name, level: 'warn', _rel: true, _calc: true, reason: 'Mesin ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[mStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
-    if (iKey && iStat) I.rows.forEach(r => { const k = v(r, iKey); if (k && /terpasang/i.test(v(r, iStat)) && !useIrr.has(k)) { I.issues.push({ row: r._i + 2, col: iStat, value: r[iStat], id: k, sheet: I.name, level: 'warn', _rel: true, _calc: true, reason: 'Irrigator ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[iStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
+    if (mKey && mStat) M.rows.forEach(r => { const k = v(r, mKey); if (k && /terpasang/i.test(v(r, mStat)) && !useEng.has(k)) { M.issues.push({ row: (r._row || r._i + 2), col: mStat, value: r[mStat], id: k, sheet: M.name, level: 'warn', _rel: true, _calc: true, reason: 'Mesin ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[mStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
+    if (iKey && iStat) I.rows.forEach(r => { const k = v(r, iKey); if (k && /terpasang/i.test(v(r, iStat)) && !useIrr.has(k)) { I.issues.push({ row: (r._row || r._i + 2), col: iStat, value: r[iStat], id: k, sheet: I.name, level: 'warn', _rel: true, _calc: true, reason: 'Irrigator ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[iStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
   }
 
   /* ---------- Peringatan kualitas data ---------- */
@@ -1086,7 +1086,7 @@
       return;
     }
     if (k === 'pipa' || !RAW[k] || RAW[k].error || !state[k]) return; // view tanpa tabel baris/sheet gagal: cukup pindah tab
-    const r = RAW[k].rows[i]; if (!r) return;
+    const r = RAW[k].rows.find(x => (x._row || x._i + 2) === i + 2) || RAW[k].rows[i]; if (!r) return;
     const idc = RAW[k].meta.idCol; resetFilters(k); if ($(k + '-search')) $(k + '-search').value = r[idc] || ''; state[k].search = r[idc] || ''; renderView(k); showDetail(k, r._i);
   });
 

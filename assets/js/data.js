@@ -158,7 +158,9 @@
     }
     const headers = rawHeaders.slice(0, last);
 
-    const body = raw.slice(1).map(r => r.slice(0, last)).filter(r => r.some(c => String(c).trim() !== ''));
+    // simpan nomor baris sheet asli (header = baris 1) agar baris kosong di tengah tidak menggeser nomor baris
+    const sheetRow = []; const body = [];
+    raw.slice(1).forEach((r0, i0) => { const r = r0.slice(0, last); if (r.some(c => String(c).trim() !== '')) { body.push(r); sheetRow.push(i0 + 2); } });
     const colVals = j => body.map(r => (r[j] == null ? '' : String(r[j]).trim()));
 
     // Deteksi per kolom: tanggal, angka, komponen A/B/C
@@ -178,19 +180,19 @@
     const issues = [];
     const idCol = ['kode unit', 'kode baru', 'kode engine', 'kode'].map(n => headers.find(h => h.toLowerCase() === n)).find(Boolean) || headers[1] || headers[0];
     const rows = body.map((r, i) => {
-      const o = { _i: i, _num: {}, _flag: null };
+      const o = { _i: i, _row: sheetRow[i], _num: {}, _flag: null };
       headers.forEach((h, j) => {
         let v = r[j] == null ? '' : String(r[j]).trim();
         if (dateOrder[h] && v) {
           const iso = toISODate(v, dateOrder[h]);
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) issues.push({ row: i + 2, col: h, value: v, level: 'warn', reason: 'Tanggal tidak dikenali (format kolom ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') + ')', suggest: 'Tulis ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') });
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) issues.push({ row: sheetRow[i], col: h, value: v, level: 'warn', reason: 'Tanggal tidak dikenali (format kolom ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') + ')', suggest: 'Tulis ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') });
           v = iso;
         }
         o[h] = v;
         if (numFmt[h] && v) {
           const chk = checkNum(v, numFmt[h]);
           o._num[h] = parseNum(v, numFmt[h]);
-          if (chk) { issues.push({ row: i + 2, col: h, value: v, ...chk }); (o._flag || (o._flag = {}))[h] = chk; }
+          if (chk) { issues.push({ row: sheetRow[i], col: h, value: v, ...chk }); (o._flag || (o._flag = {}))[h] = chk; }
         }
       });
       return o;
@@ -203,8 +205,8 @@
       const med = vals[Math.floor(vals.length / 2)], p95 = vals[Math.floor(vals.length * 0.95)];
       rows.forEach(r => {
         const n = r._num[h]; if (isNaN(n) || (r._flag && r._flag[h])) return;
-        if (n > Math.max(med * 50, p95 * 10)) { const chk = { level: 'warn', reason: 'Nilai ekstrem (' + Math.round(n / med) + '× median kolom) — kemungkinan salah pemisah ribuan/desimal; TIDAK dihitung dalam total', suggest: 'Periksa: mungkin seharusnya ' + (n / 1000).toLocaleString('id-ID', { maximumFractionDigits: 2 }) }; issues.push({ row: r._i + 2, col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; r._num[h] = NaN; }
-        else if (n < 0) { const chk = { level: 'warn', reason: 'Nilai negatif', suggest: 'Periksa tanda minus' }; issues.push({ row: r._i + 2, col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; }
+        if (n > Math.max(med * 50, p95 * 10)) { const chk = { level: 'warn', reason: 'Nilai ekstrem (' + Math.round(n / med) + '× median kolom) — kemungkinan salah pemisah ribuan/desimal; TIDAK dihitung dalam total', suggest: 'Periksa: mungkin seharusnya ' + (n / 1000).toLocaleString('id-ID', { maximumFractionDigits: 2 }) }; issues.push({ row: (r._row || r._i + 2), col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; r._num[h] = NaN; }
+        else if (n < 0) { const chk = { level: 'warn', reason: 'Nilai negatif', suggest: 'Periksa tanda minus' }; issues.push({ row: (r._row || r._i + 2), col: h, value: r[h], ...chk }); (r._flag || (r._flag = {}))[h] = chk; }
       });
     });
 
@@ -217,7 +219,7 @@
           if (v === 'C') { worst = 'C'; bad.push(h + ' (C)'); }
           else if (v === 'B') { if (worst !== 'C') worst = 'B'; bad.push(h + ' (B)'); }
         }
-        if (!filled) { worst = ''; issues.push({ row: r._i + 2, col: 'Kondisi Komponen', value: '(semua komponen kosong)', level: 'info', reason: 'Belum ada penilaian komponen A/B/C', suggest: 'Isi kondisi komponen unit ini' }); }
+        if (!filled) { worst = ''; issues.push({ row: (r._row || r._i + 2), col: 'Kondisi Komponen', value: '(semua komponen kosong)', level: 'info', reason: 'Belum ada penilaian komponen A/B/C', suggest: 'Isi kondisi komponen unit ini' }); }
         r['Kondisi Komponen'] = worst;
         r['Komponen Bermasalah'] = bad.join(', ');
       });
