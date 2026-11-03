@@ -1,8 +1,9 @@
 /**
  * =====================================================================
  *  Field Support Irigasi PG 2 — Web App penulis (Apps Script)
- *  Dipakai tombol "Pindah Unit" di dashboard untuk mengubah baris pada
- *  sheet "Detail Terpasang" secara langsung.
+ *  Dipakai tombol "Pindah Unit", "Tarik ke Bengkel" dan "Pasang Unit" di
+ *  dashboard untuk mengubah / menghapus / menambah baris pada sheet
+ *  "Detail Terpasang" secara langsung.
  *
  *  CARA PASANG (sekali saja):
  *   1. Buka spreadsheet → Extensions → Apps Script → hapus isi Code.gs,
@@ -36,9 +37,9 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 5, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 6, time: new Date().toISOString(), info: info });
   }
-  return out_({ ok: false, error: 'Gunakan POST (action: move) atau ?action=ping' });
+  return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install) atau ?action=ping' });
 }
 
 function doPost(e) {
@@ -53,6 +54,7 @@ function doPost(e) {
   if (body.action === 'verify') return out_({ ok: true });
   if (body.action === 'move') return move_(body);
   if (body.action === 'withdraw') return withdraw_(body);
+  if (body.action === 'install') return install_(body);
   return out_({ ok: false, error: 'Aksi tidak dikenal: ' + body.action });
 }
 
@@ -161,6 +163,117 @@ function withdraw_(b) {
     log_(ss, [new Date(), b.user || '', row, eng, irr, old[cLok - 1], old[cWil - 1], old[cKA - 1], 'TARIK KE BENGKEL', '', '', '', String(b.keterangan || '') + (upd.mesin ? ' | Mesin → ' + upd.mesin : '') + (upd.irrigator ? ' | Irrigator → ' + upd.irrigator : '')]);
     SpreadsheetApp.flush();
     return out_({ ok: true, row: row, deleted: true, status: upd, noFixed: noFix });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message || err) });
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- pasang unit: sisipkan baris baru di bawah baris terakhir wilayah yang sama ----------
+ * Kolom yang diisi manual: Tanggal, Bengkel, Lokasi, Wil, Kode Engine, Kode Irigator, Keterangan.
+ * Kolom lain (No, Jenis Engine, Terpasang, Power, Sumber Air, Kode Air, …) MENIRU RUMUS baris acuan
+ * (relatif, R1C1). Bila kolom tsb tidak berumus, atau rumusnya menghasilkan kosong/error, dipakai
+ * nilai usulan dari dashboard (values[header]) sebagai teks.
+ */
+function install_(b) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID), sh = ss.getSheetByName(SHEET_DETAIL);
+    if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_DETAIL + '" tidak ditemukan' });
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var col = function (name) { var i = headers.indexOf(name); if (i < 0) throw new Error('Kolom "' + name + '" tidak ada di header'); return i + 1; };
+    var cLok = col('Lokasi'), cWil = col('Wil'), cEng = col('Kode Engine'), cIrr = col('Kode Irigator'), cKet = col('Keterangan'), cTgl = col('Tanggal'), cBkl = col('Bengkel');
+    var cNo = headers.indexOf('No') + 1;
+
+    var m = b.manual || {}, vals = b.values || {};
+    var lokasi = String(m.lokasi || '').trim().toUpperCase(), wil = String(m.wil || '').trim().toUpperCase();
+    var eng = String(m.kodeEngine || '').trim().toUpperCase(), irr = String(m.kodeIrigator || '').trim().toUpperCase();
+    if (!lokasi) return out_({ ok: false, error: 'Lokasi kosong' });
+    if (!wil) return out_({ ok: false, error: 'Wil kosong' });
+    if (!eng && !irr) return out_({ ok: false, error: 'Isi minimal Kode Engine atau Kode Irigator' });
+
+    // tolak bila unit masih tercatat terpasang di baris lain
+    var data = lastRow >= 2 ? sh.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+    for (var i = 0; i < data.length; i++) {
+      if (eng && String(data[i][cEng - 1]).trim().toUpperCase() === eng) return out_({ ok: false, error: 'Kode Engine ' + eng + ' masih terpasang di ' + data[i][cLok - 1] + ' (baris ' + (i + 2) + '). Pindahkan / tarik dulu.' });
+      if (irr && String(data[i][cIrr - 1]).trim().toUpperCase() === irr) return out_({ ok: false, error: 'Kode Irigator ' + irr + ' masih terpasang di ' + data[i][cLok - 1] + ' (baris ' + (i + 2) + '). Pindahkan / tarik dulu.' });
+    }
+
+    // baris acuan = baris terakhir dengan Wil yang sama; bila wilayah belum ada → baris data terakhir
+    var ref = 0;
+    for (var j = data.length - 1; j >= 0; j--) if (String(data[j][cWil - 1]).trim().toUpperCase() === wil) { ref = j + 2; break; }
+    var placed = ref ? 'wil' : 'end';
+    if (!ref) ref = Math.max(lastRow, 1);
+
+    // simpan pola rumus (R1C1) tiap kolom dari baris acuan (atau baris berumus terdekat pada kolom itu)
+    var pattern = [];
+    for (var c = 1; c <= lastCol; c++) {
+      var f = ref >= 2 ? sh.getRange(ref, c).getFormulaR1C1() : '';
+      if (!f && lastRow >= 2) { var t = findFormulaCell_(sh, ref >= 2 ? ref : 2, c); if (t) f = t.getFormulaR1C1(); }
+      pattern.push(f || '');
+    }
+
+    sh.insertRowAfter(ref);
+    var row = ref + 1;
+    // format (tanggal, border, dsb.) ikut baris acuan
+    if (ref >= 2) sh.getRange(ref, 1, 1, lastCol).copyTo(sh.getRange(row, 1, 1, lastCol), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+
+    // 1) kolom manual
+    var tgl = null;
+    if (m.tanggal && /^\d{4}-\d{2}-\d{2}$/.test(m.tanggal)) { var p = m.tanggal.split('-'); tgl = new Date(+p[0], +p[1] - 1, +p[2]); }
+    sh.getRange(row, cTgl).setValue(tgl || new Date());
+    sh.getRange(row, cBkl).setValue(String(m.bengkel || '').trim());
+    sh.getRange(row, cLok).setValue(lokasi);
+    sh.getRange(row, cWil).setValue(wil);
+    sh.getRange(row, cEng).setValue(eng);
+    sh.getRange(row, cIrr).setValue(irr);
+    sh.getRange(row, cKet).setValue(String(m.keterangan || '').trim());
+    var manualCols = [cTgl, cBkl, cLok, cWil, cEng, cIrr, cKet];
+
+    // 2) kolom lain: tiru rumus; bila tidak berumus / hasil kosong → nilai usulan
+    var modes = {};
+    for (var c2 = 1; c2 <= lastCol; c2++) {
+      if (manualCols.indexOf(c2) >= 0 || !headers[c2 - 1]) continue;
+      var h = headers[c2 - 1], cell = sh.getRange(row, c2), v = vals[h] !== undefined ? String(vals[h]).trim() : '';
+      if (c2 === cNo) continue; // ditangani khusus di bawah
+      if (pattern[c2 - 1]) {
+        cell.setFormulaR1C1(pattern[c2 - 1]); SpreadsheetApp.flush();
+        var shown = String(cell.getDisplayValue()).trim();
+        if (shown && !/^#(N\/A|REF!|VALUE!|NAME\?|ERROR!|DIV\/0!|NUM!)/.test(shown)) { modes[h] = 'formula'; continue; }
+        if (!v) { modes[h] = 'empty-formula'; continue; }
+      }
+      if (v) { cell.setValue(v); modes[h] = 'value'; } else modes[h] = 'empty';
+    }
+
+    // 3) kolom No: rumus berantai → pasang pola di baris baru DAN baris setelahnya (agar rantai tersambung); bila angka → nomor ulang
+    var noFix = 0;
+    if (cNo) {
+      var noPat = pattern[cNo - 1] || (ref >= 2 && sh.getRange(ref, cNo).getFormula() ? sh.getRange(ref, cNo).getFormulaR1C1() : '');
+      var newLast = sh.getLastRow();
+      if (noPat) {
+        if (row === 2) sh.getRange(2, cNo).setValue(1); else sh.getRange(row, cNo).setFormulaR1C1(noPat);
+        if (row + 1 <= newLast && sh.getRange(row + 1, cNo).getFormula()) sh.getRange(row + 1, cNo).setFormulaR1C1(noPat);
+        noFix = repairNoColumn_(sh, row, cNo, noPat);
+        modes['No'] = 'formula';
+      } else {
+        var n = ref >= 2 ? Number(sh.getRange(ref, cNo).getValue()) : 0;
+        for (var r2 = row; r2 <= newLast; r2++) sh.getRange(r2, cNo).setValue(++n);
+        modes['No'] = 'value';
+      }
+    }
+
+    // 4) status unit di sheet Mesin / Irrigator (mis. "Terpasang")
+    var upd = { mesin: '', irrigator: '' };
+    if (b.statusMesin && eng) upd.mesin = setStatus_(ss, SHEET_MESIN, 'Kode Unit', eng, String(b.statusMesin));
+    if (b.statusIrrigator && irr) upd.irrigator = setStatus_(ss, SHEET_IRR, 'KODE UNIT', irr, String(b.statusIrrigator));
+
+    SpreadsheetApp.flush();
+    var out = sh.getRange(row, 1, 1, lastCol).getDisplayValues()[0], rowObj = {};
+    headers.forEach(function (h2, k) { if (h2) rowObj[h2] = out[k]; });
+    log_(ss, [new Date(), b.user || '', row, eng, irr, 'PASANG BARU', '', '', lokasi, wil, rowObj['Kode Air'] || '', rowObj['Sumber Air'] || '',
+      String(m.keterangan || '') + (upd.mesin ? ' | Mesin → ' + upd.mesin : '') + (upd.irrigator ? ' | Irrigator → ' + upd.irrigator : '')]);
+    return out_({ ok: true, row: row, placed: placed, afterRow: ref, rowData: rowObj, modes: modes, status: upd, noFixed: noFix });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }

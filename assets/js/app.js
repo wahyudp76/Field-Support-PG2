@@ -256,6 +256,7 @@
         <h3>${cfg.icon} ${esc(cfg.title)}</h3>
         <div class="tbl-tools">
           <span class="info" id="${k}-info"></span>
+          ${k === 'detail' && window.FSEdit ? '<button class="btn btn-primary" type="button" id="detail-install" onclick="FSEdit.install()" title="Tambah baris unit baru di sheet Detail Terpasang">➕ Pasang Unit</button>' : ''}
           <label class="ps switch" title="Bekukan kolom kiri s.d. ${esc(cfg.freezeUntil || '')}"><input type="checkbox" id="${k}-freeze" ${cfg.freezeUntil ? 'checked' : 'disabled'}> 🧊 Freeze kolom</label>
           <label class="ps">Tampilkan <select id="${k}-size">${PAGE_SIZES.map(s => `<option value="${s}">${s}</option>`).join('')}</select> baris</label>
         </div>

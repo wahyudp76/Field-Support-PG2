@@ -1,5 +1,5 @@
 /* =====================================================================
- *  Pindah Unit — edit perpindahan unit existing di sheet "Detail Terpasang"
+ *  Pindah Unit / Tarik ke Bengkel / Pasang Unit — tulis-balik unit di sheet "Detail Terpasang"
  *  Menulis lewat Apps Script Web App (lihat apps-script/Code.gs).
  *  Bergantung pada window.__FS yang diekspor app.js: { RAW, loadData, toast, esc, fmt, refreshRow }
  * ===================================================================== */
@@ -134,7 +134,7 @@
     else h += `<div class="sug-h">ℹ️ Belum ada sumber air berkode untuk blok <b>${esc(lok)}</b> di sheet Sumber Air — pilih yang terdekat <span>(ditulis sebagai teks, tanpa rumus)</span>:</div>`;
     if (g.near.length) h += `<div class="sug-h sub">📍 Terdekat${g.note ? ' <span>(' + esc(g.note) + ')</span>' : ''}</div><div class="sug-row">${g.near.map(s => card(s, s.nums.has(parseLok(lok).num) ? 'blok sama' : 'terdekat')).join('')}</div>`;
     if (!g.exact.length && !g.near.length) h += `<div class="empty">${esc(g.note || 'Tidak ada kandidat')}</div>`;
-    const used = (F().RAW.detail.rows || []).filter(x => x !== r && x['Lokasi'] === lok);
+    const used = (F().RAW.detail.rows || []).filter(x => (!r || x !== r) && x['Lokasi'] === lok);
     if (used.length) h = `<div class="sug-warn">⚠️ Lokasi ${esc(lok)} sudah dipakai unit lain: ${used.map(x => esc(x['Kode Engine'] || ('baris ' + (x._i + 2)))).join(', ')}</div>` + h;
     box.innerHTML = h;
   }
@@ -218,6 +218,87 @@
     };
   }
 
+  /* ---------- pasang unit baru: sisipkan baris di wilayah yang sesuai ---------- */
+  function install() {
+    ensureModal();
+    const D = F().RAW && F().RAW.detail; if (!D || D.error) return toast('Data Detail Terpasang belum siap', true);
+    if (!apiUrl()) return setup(() => install());
+    const R = F().RAW, mesin = R.mesin && !R.mesin.error ? R.mesin.rows : [], irr = R.irrigator && !R.irrigator.error ? R.irrigator.rows : [];
+    const usedE = new Set(D.rows.map(x => String(x['Kode Engine'] || '').trim().toUpperCase()).filter(Boolean)), usedI = new Set(D.rows.map(x => String(x['Kode Irigator'] || '').trim().toUpperCase()).filter(Boolean));
+    const wils = [...new Set(D.rows.map(x => String(x['Wil'] || '').trim()).filter(Boolean))].sort();
+    const bCnt = {}; D.rows.forEach(x => { const b = String(x['Bengkel'] || '').trim(); if (b) bCnt[b] = (bCnt[b] || 0) + 1; }); const bkl = Object.keys(bCnt).sort((a, b) => bCnt[b] - bCnt[a]);
+    const jenis = [...new Set((R.sumber && !R.sumber.error ? R.sumber.rows : []).map(x => String(x[sumberCols.jenis] || '').trim()).filter(Boolean))].sort();
+    const today = new Date(), iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const optE = mesin.map(x => ({ k: String(x['Kode Unit'] || '').trim().toUpperCase(), st: String(x['Status'] || '').trim(), p: x['Power'] || '', sp: x['Spec'] || '' })).filter(x => x.k)
+      .sort((a, b) => (usedE.has(a.k) - usedE.has(b.k)) || a.k.localeCompare(b.k));
+    const optI = irr.map(x => ({ k: String(x['KODE UNIT'] || '').trim().toUpperCase(), st: String(x['Status'] || '').trim() })).filter(x => x.k).sort((a, b) => (usedI.has(a.k) - usedI.has(b.k)) || a.k.localeCompare(b.k));
+    const stOpts = ['Terpasang', ''];
+    $('editTitle').textContent = '➕ Pasang Unit Irigasi (baris baru)';
+    $('editBody').innerHTML = `
+      <div class="edit-cur"><b>Baris baru akan disisipkan di sheet <i>Detail Terpasang</i> tepat di bawah baris terakhir wilayah yang dipilih.</b>
+        <div class="edit-ket">Kolom <b>No, Jenis Engine, Terpasang, Power, Sumber Air, Kode Air</b> otomatis meniru rumus kolom yang sudah ada; bila kolom tidak berumus (atau rumusnya kosong) dipakai nilai usulan di bawah.</div></div>
+      <form id="insForm" class="edit-form" autocomplete="off">
+        <label>Tanggal pasang <input id="in-tgl" type="date" value="${iso}" required></label>
+        <label>Bengkel <input id="in-bkl" list="in-bkl-l" placeholder="mis. FM4 / OP2 / PG2" required value="${esc(bkl[0] || '')}"><datalist id="in-bkl-l">${bkl.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>
+        <label>Lokasi <input id="ed-lok" required placeholder="mis. 303M / 109D1"></label>
+        <label>Wil <select id="ed-wil">${wils.map(w => `<option>${esc(w)}</option>`).join('')}</select></label>
+        <label>Kode Engine <input id="in-eng" list="in-eng-l" placeholder="mis. DEM0034 (kosongkan bila tanpa engine)"><datalist id="in-eng-l">${optE.map(x => `<option value="${esc(x.k)}">${esc((usedE.has(x.k) ? '⚠ sudah terpasang' : x.st || '') + (x.p ? ' · ' + x.p + ' HP' : '') + (x.sp ? ' · ' + x.sp : ''))}</option>`).join('')}</datalist><small id="in-eng-i" class="edit-hint"></small></label>
+        <label>Kode Irigator <input id="in-irr" list="in-irr-l" placeholder="mis. ITI0112 (kosong utk drip)"><datalist id="in-irr-l">${optI.map(x => `<option value="${esc(x.k)}">${esc(usedI.has(x.k) ? '⚠ sudah terpasang' : x.st)}</option>`).join('')}</datalist><small id="in-irr-i" class="edit-hint"></small></label>
+        <label>Sumber Air <select id="ed-sa"><option value="">(pilih / otomatis dari kode)</option>${jenis.map(j => `<option>${esc(j)}</option>`).join('')}</select></label>
+        <label>Kode Air <input id="ed-ka" placeholder="pilih rekomendasi di bawah"></label>
+        <label class="wide">Keterangan (opsional) <input id="in-ket" placeholder="catatan pemasangan"></label>
+        <div class="wide edit-sug" id="ed-sug"><div class="empty">Ketik lokasi untuk melihat rekomendasi sumber air.</div></div>
+        <label>Status di sheet Mesin <select id="in-sm">${stOpts.map(o => `<option value="${o}">${o || '(tidak diubah)'}</option>`).join('')}</select></label>
+        <label>Status di sheet Irrigator <select id="in-si">${stOpts.map(o => `<option value="${o}">${o || '(tidak diubah)'}</option>`).join('')}</select></label>
+        <label>PIN <input id="in-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
+        <label>Nama pengisi <input id="in-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="in-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="in-cancel">Batal</button><button type="submit" class="btn btn-primary" id="in-save">➕ Pasang & Tambah Baris</button></div>
+        <div class="wide edit-msg" id="in-msg"></div>
+      </form>`;
+    $('editModal').classList.add('show');
+    $('in-cancel').onclick = close; $('in-setup').onclick = () => setup(() => install());
+    let t; const upd = () => { clearTimeout(t); t = setTimeout(() => renderSug(null), 180); };
+    $('ed-lok').oninput = upd; $('ed-wil').onchange = upd;
+    $('ed-sug').onclick = e => { const b = e.target.closest('[data-kode]'); if (!b) return; $('ed-ka').value = b.dataset.kode; if (b.dataset.jenis) $('ed-sa').value = b.dataset.jenis; [...$('ed-sug').querySelectorAll('.sug')].forEach(x => x.classList.toggle('on', x === b)); };
+    $('ed-ka').oninput = () => { const ix = index(); const s = ix && ix.list.find(x => x.kode === $('ed-ka').value.trim().toUpperCase()); if (s && s.jenis) $('ed-sa').value = s.jenis; };
+    const engInfo = () => { const k = $('in-eng').value.trim().toUpperCase(), m = optE.find(x => x.k === k), el = $('in-eng-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Mesin' : (usedE.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Engine']).toUpperCase() === k) || {})['Lokasi'] : '✓ ' + (m.st || '') + (m.p ? ' · Power ' + m.p : '') + ' · Jenis ' + k.replace(/\d+$/, '')); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
+    const irrInfo = () => { const k = $('in-irr').value.trim().toUpperCase(), m = optI.find(x => x.k === k), el = $('in-irr-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Irrigator' : (usedI.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Irigator']).toUpperCase() === k) || {})['Lokasi'] : '✓ ' + (m.st || '')); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
+    $('in-eng').oninput = engInfo; $('in-irr').oninput = irrInfo;
+    $('insForm').onsubmit = async e => {
+      e.preventDefault();
+      const lok = $('ed-lok').value.trim().toUpperCase(), wil = $('ed-wil').value, eng = $('in-eng').value.trim().toUpperCase(), ir = $('in-irr').value.trim().toUpperCase(), pin = $('in-pin').value.trim(), ka = $('ed-ka').value.trim().toUpperCase(), msg = $('in-msg'), btn = $('in-save');
+      const err = m => { msg.textContent = m; msg.className = 'wide edit-msg err'; };
+      if (!parseLok(lok)) return err('Format lokasi tidak dikenali (contoh 303M, 109D1).');
+      if (!eng && !ir) return err('Isi minimal Kode Engine atau Kode Irigator.');
+      if (!pin) return err('PIN wajib diisi.');
+      if (usedE.has(eng) || usedI.has(ir)) return err('Unit tersebut masih tercatat terpasang di lokasi lain — gunakan Pindah Unit atau Tarik ke Bengkel dulu.');
+      const mE = optE.find(x => x.k === eng);
+      if (eng && !mE && !confirm('Kode Engine "' + eng + '" tidak ada di sheet Mesin. Tetap simpan?')) return;
+      if (ir && !optI.some(x => x.k === ir) && !confirm('Kode Irigator "' + ir + '" tidak ada di sheet Irrigator. Tetap simpan?')) return;
+      if (D.rows.some(x => x['Lokasi'] === lok) && !confirm('Lokasi ' + lok + ' sudah dipakai unit lain. Tetap tambahkan?')) return;
+      if (!ka && !confirm('Kode Air kosong — bila rumus sheet tidak menemukan sumber air, kolom akan kosong. Lanjutkan?')) return;
+      const body = { action: 'install', pin, user: $('in-user').value.trim(),
+        manual: { tanggal: $('in-tgl').value, bengkel: $('in-bkl').value.trim(), lokasi: lok, wil, kodeEngine: eng, kodeIrigator: ir, keterangan: $('in-ket').value.trim() },
+        values: { 'Jenis Engine': eng ? eng.replace(/\d+$/, '') : '', 'Terpasang': 'Terpasang', 'Power': mE ? String(mE.p || '') : '', 'Sumber Air': $('ed-sa').value, 'Kode Air': ka },
+        statusMesin: eng ? $('in-sm').value : '', statusIrrigator: ir ? $('in-si').value : '' };
+      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menambah baris di spreadsheet…';
+      try {
+        const j = await post(body);
+        if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
+        localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('in-user').value.trim());
+        const md = j.modes || {}, rumus = Object.keys(md).filter(h => md[h] === 'formula'), teks = Object.keys(md).filter(h => md[h] === 'value');
+        const st = [j.status && j.status.mesin ? 'Mesin → ' + j.status.mesin : '', j.status && j.status.irrigator ? 'Irrigator → ' + j.status.irrigator : ''].filter(Boolean).join(', ');
+        msg.className = 'wide edit-msg ok';
+        msg.textContent = '✔ Baris ' + j.row + ' ditambahkan' + (j.placed === 'wil' ? ' (di bawah baris terakhir ' + wil + ')' : ' (di akhir sheet — wilayah ' + wil + ' belum ada)') + (rumus.length ? ' · rumus: ' + rumus.join(', ') : '') + (teks.length ? ' · teks: ' + teks.join(', ') : '') + (st ? ' · ' + st : '') + '. Menyinkronkan ulang…';
+        toast('Unit ' + (eng || ir) + ' dipasang di ' + lok + ' ✔');
+        setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1800);
+      } catch (ex) {
+        msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (ex.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : ex.message); btn.disabled = false;
+      }
+    };
+    setTimeout(() => $('ed-lok').focus(), 50);
+  }
+
   /* ---------- pengaturan URL Web App ---------- */
   function setup(after) {
     ensureModal();
@@ -238,5 +319,5 @@
     $('setupForm').onsubmit = e => { e.preventDefault(); const u = $('su-url').value.trim(); if (u && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u) && !confirm('URL tidak tampak seperti Web App Apps Script (…/exec). Simpan juga?')) return; if (u) localStorage.setItem(LS_URL, u); else localStorage.removeItem(LS_URL); toast(u ? 'URL Web App disimpan' : 'URL Web App dihapus'); close(); if (u && after) after(); };
   }
 
-  window.FSEdit = { open, setup, suggest, enabled: () => true, apiUrl };
+  window.FSEdit = { open, install, setup, suggest, enabled: () => true, apiUrl };
 })();

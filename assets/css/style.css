@@ -304,3 +304,8 @@ tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: bac
 .btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}.btn-danger:disabled{opacity:.5;cursor:not-allowed}
 .edit-form label.chk{flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);font-weight:500}
 .edit-form label.chk input{width:16px;height:16px;accent-color:#ef4444}
+
+/* pasang unit */
+.edit-form .edit-hint{display:block;font-size:11px;color:#2e7d32;margin-top:3px;min-height:14px}
+.edit-form .edit-hint.warn{color:#c62828}
+.tbl-tools #detail-install{padding:6px 12px}
