@@ -230,8 +230,11 @@
     const jenis = [...new Set((R.sumber && !R.sumber.error ? R.sumber.rows : []).map(x => String(x[sumberCols.jenis] || '').trim()).filter(Boolean))].sort();
     const today = new Date(), iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
     const optE = mesin.map(x => ({ k: String(x['Kode Unit'] || '').trim().toUpperCase(), st: String(x['Status'] || '').trim(), p: x['Power'] || '', sp: x['Spec'] || '' })).filter(x => x.k)
-      .sort((a, b) => (usedE.has(a.k) - usedE.has(b.k)) || a.k.localeCompare(b.k));
-    const optI = irr.map(x => ({ k: String(x['KODE UNIT'] || '').trim().toUpperCase(), st: String(x['Status'] || '').trim() })).filter(x => x.k).sort((a, b) => (usedI.has(a.k) - usedI.has(b.k)) || a.k.localeCompare(b.k));
+      .sort((a, b) => a.k.localeCompare(b.k));
+    const optI = irr.map(x => ({ k: String(x['KODE UNIT'] || '').trim().toUpperCase(), st: String(x['Status'] || '').trim() })).filter(x => x.k).sort((a, b) => a.k.localeCompare(b.k));
+    // daftar pilihan: hanya unit berstatus Standby (di sheet Mesin / Irrigator) dan belum tercatat terpasang
+    const isStandby = st => /^standby$/i.test(st);
+    const listE = optE.filter(x => isStandby(x.st) && !usedE.has(x.k)), listI = optI.filter(x => isStandby(x.st) && !usedI.has(x.k));
     const stOpts = ['Terpasang', ''];
     $('editTitle').textContent = '➕ Pasang Unit Irigasi (baris baru)';
     $('editBody').innerHTML = `
@@ -242,8 +245,8 @@
         <label>Bengkel <input id="in-bkl" list="in-bkl-l" placeholder="mis. FM4 / OP2 / PG2" required value="${esc(bkl[0] || '')}"><datalist id="in-bkl-l">${bkl.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>
         <label>Lokasi <input id="ed-lok" required placeholder="mis. 303M / 109D1"></label>
         <label>Wil <select id="ed-wil">${wils.map(w => `<option>${esc(w)}</option>`).join('')}</select></label>
-        <label>Kode Engine <input id="in-eng" list="in-eng-l" placeholder="mis. DEM0034 (kosongkan bila tanpa engine)"><datalist id="in-eng-l">${optE.map(x => `<option value="${esc(x.k)}">${esc((usedE.has(x.k) ? '⚠ sudah terpasang' : x.st || '') + (x.p ? ' · ' + x.p + ' HP' : '') + (x.sp ? ' · ' + x.sp : ''))}</option>`).join('')}</datalist><small id="in-eng-i" class="edit-hint"></small></label>
-        <label>Kode Irigator <input id="in-irr" list="in-irr-l" placeholder="mis. ITI0112 (kosong utk drip)"><datalist id="in-irr-l">${optI.map(x => `<option value="${esc(x.k)}">${esc(usedI.has(x.k) ? '⚠ sudah terpasang' : x.st)}</option>`).join('')}</datalist><small id="in-irr-i" class="edit-hint"></small></label>
+        <label>Kode Engine <span class="edit-cnt">${listE.length} standby</span><input id="in-eng" list="in-eng-l" placeholder="pilih engine Standby (kosongkan bila tanpa engine)"><datalist id="in-eng-l">${listE.map(x => `<option value="${esc(x.k)}">${esc('Standby' + (x.p ? ' · ' + x.p + ' HP' : '') + (x.sp ? ' · ' + x.sp : ''))}</option>`).join('')}</datalist><small id="in-eng-i" class="edit-hint"></small></label>
+        <label>Kode Irigator <span class="edit-cnt">${listI.length} standby</span><input id="in-irr" list="in-irr-l" placeholder="pilih irigator Standby (kosong utk drip)"><datalist id="in-irr-l">${listI.map(x => `<option value="${esc(x.k)}">Standby</option>`).join('')}</datalist><small id="in-irr-i" class="edit-hint"></small></label>
         <label>Sumber Air <select id="ed-sa"><option value="">(pilih / otomatis dari kode)</option>${jenis.map(j => `<option>${esc(j)}</option>`).join('')}</select></label>
         <label>Kode Air <input id="ed-ka" placeholder="pilih rekomendasi di bawah"></label>
         <label class="wide">Keterangan (opsional) <input id="in-ket" placeholder="catatan pemasangan"></label>
@@ -261,8 +264,8 @@
     $('ed-lok').oninput = upd; $('ed-wil').onchange = upd;
     $('ed-sug').onclick = e => { const b = e.target.closest('[data-kode]'); if (!b) return; $('ed-ka').value = b.dataset.kode; if (b.dataset.jenis) $('ed-sa').value = b.dataset.jenis; [...$('ed-sug').querySelectorAll('.sug')].forEach(x => x.classList.toggle('on', x === b)); };
     $('ed-ka').oninput = () => { const ix = index(); const s = ix && ix.list.find(x => x.kode === $('ed-ka').value.trim().toUpperCase()); if (s && s.jenis) $('ed-sa').value = s.jenis; };
-    const engInfo = () => { const k = $('in-eng').value.trim().toUpperCase(), m = optE.find(x => x.k === k), el = $('in-eng-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Mesin' : (usedE.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Engine']).toUpperCase() === k) || {})['Lokasi'] : '✓ ' + (m.st || '') + (m.p ? ' · Power ' + m.p : '') + ' · Jenis ' + k.replace(/\d+$/, '')); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
-    const irrInfo = () => { const k = $('in-irr').value.trim().toUpperCase(), m = optI.find(x => x.k === k), el = $('in-irr-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Irrigator' : (usedI.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Irigator']).toUpperCase() === k) || {})['Lokasi'] : '✓ ' + (m.st || '')); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
+    const engInfo = () => { const k = $('in-eng').value.trim().toUpperCase(), m = optE.find(x => x.k === k), el = $('in-eng-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Mesin' : (usedE.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Engine']).toUpperCase() === k) || {})['Lokasi'] : !isStandby(m.st) ? '⚠ status di sheet Mesin: ' + (m.st || 'kosong') + ' (bukan Standby)' : '✓ Standby' + (m.p ? ' · Power ' + m.p : '') + ' · Jenis ' + k.replace(/\d+$/, '')); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
+    const irrInfo = () => { const k = $('in-irr').value.trim().toUpperCase(), m = optI.find(x => x.k === k), el = $('in-irr-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Irrigator' : (usedI.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Irigator']).toUpperCase() === k) || {})['Lokasi'] : !isStandby(m.st) ? '⚠ status di sheet Irrigator: ' + (m.st || 'kosong') + ' (bukan Standby)' : '✓ Standby'); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
     $('in-eng').oninput = engInfo; $('in-irr').oninput = irrInfo;
     $('insForm').onsubmit = async e => {
       e.preventDefault();
@@ -274,6 +277,9 @@
       if (usedE.has(eng) || usedI.has(ir)) return err('Unit tersebut masih tercatat terpasang di lokasi lain — gunakan Pindah Unit atau Tarik ke Bengkel dulu.');
       const mE = optE.find(x => x.k === eng);
       if (eng && !mE && !confirm('Kode Engine "' + eng + '" tidak ada di sheet Mesin. Tetap simpan?')) return;
+      if (mE && !isStandby(mE.st) && !confirm('Kode Engine ' + eng + ' berstatus "' + (mE.st || 'kosong') + '" (bukan Standby) di sheet Mesin. Tetap pasang?')) return;
+      const mI = optI.find(x => x.k === ir);
+      if (mI && !isStandby(mI.st) && !confirm('Kode Irigator ' + ir + ' berstatus "' + (mI.st || 'kosong') + '" (bukan Standby) di sheet Irrigator. Tetap pasang?')) return;
       if (ir && !optI.some(x => x.k === ir) && !confirm('Kode Irigator "' + ir + '" tidak ada di sheet Irrigator. Tetap simpan?')) return;
       if (D.rows.some(x => x['Lokasi'] === lok) && !confirm('Lokasi ' + lok + ' sudah dipakai unit lain. Tetap tambahkan?')) return;
       if (!ka && !confirm('Kode Air kosong — bila rumus sheet tidak menemukan sumber air, kolom akan kosong. Lanjutkan?')) return;
