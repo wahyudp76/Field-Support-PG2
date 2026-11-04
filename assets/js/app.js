@@ -59,11 +59,12 @@
     sumber: {
       title: 'Inventaris Sumber Air', icon: '🌊',
       freezeUntil: 'Wilayah',
-      filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Status', 'Tahun'],
+      filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Pompa', 'Status', 'Tahun'],
       kpis: [
         { label: 'Total Sumber Air', icon: '🌊', c: '#38bdf8', fn: r => r.length },
         { label: 'Lebung / Reservoir', icon: '🏞️', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length },
         { label: 'Deep Well', icon: '🕳️', c: '#a78bfa', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /deep|sumur/i)).length },
+        { label: 'Sumur Ada Pompa', icon: '🔄', c: '#0ea5e9', fn: r => r.filter(x => /ada/i.test(x['Pompa'] || '')).length, sub: r => { const k = r.filter(x => /kosong/i.test(x['Pompa'] || '')).length, d = r.filter(x => /rusak/i.test(x['Pompa'] || '')).length; return (k || d) ? k + ' kosong · ' + d + ' rusak' : ''; } },
         { label: 'Aktif Irigasi', icon: '✅', c: '#f59e0b', fn: r => r.filter(x => isTrue(x['Keterangan (Aktif Irigasi/Tidak)'], /aktif/i) && !isTrue(x['Keterangan (Aktif Irigasi/Tidak)'], /tidak|non/i)).length },
         { label: 'Sudah Diukur', icon: '📐', c: '#14b8a6', fn: r => r.filter(x => isTrue(x['Keterangan Ukur'], /^ukur/i)).length },
         { label: 'Vol. Real (m³)', icon: '📏', c: '#ec4899', fn: r => fmt(sum(r, 'Volume Real Ukur (Overflow Terbuka)')) },
@@ -79,6 +80,7 @@
         'Keterangan (Aktif Irigasi/Tidak)': v => /tidak|non/i.test(v) ? 'chip-red' : 'chip-green',
         'Keterangan Ukur': v => /belum/i.test(v) ? 'chip-amber' : 'chip-blue',
         'Jenis Sumber Air': v => /deep|sumur/i.test(v) ? 'chip-purple' : 'chip-blue',
+        'Pompa': v => /ada/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
         'Status': v => /siap/i.test(v) ? 'chip-green' : /kosong/i.test(v) ? 'chip-amber' : 'chip-gray',
         'Kondisi Sumur': v => /baik/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : /perbaikan/i.test(v) ? 'chip-amber' : 'chip-gray'
       },
@@ -257,6 +259,7 @@
         <div class="tbl-tools">
           <span class="info" id="${k}-info"></span>
           ${k === 'detail' && window.FSEdit ? '<button class="btn btn-primary" type="button" id="detail-install" onclick="FSEdit.install()" title="Tambah baris unit baru di sheet Detail Terpasang">➕ Pasang Unit</button>' : ''}
+          ${k === 'sumber' && window.FSEdit ? '<button class="btn btn-primary" type="button" id="sumber-pump" onclick="FSEdit.pump()" title="Pindah / ubah ketersediaan pompa sumur bor (kolom Pompa di sheet Sumber Air)">🔄 Pindah Pompa Sumur</button>' : ''}
           <label class="ps switch" title="Bekukan kolom kiri s.d. ${esc(cfg.freezeUntil || '')}"><input type="checkbox" id="${k}-freeze" ${cfg.freezeUntil ? 'checked' : 'disabled'}> 🧊 Freeze kolom</label>
           <label class="ps">Tampilkan <select id="${k}-size">${PAGE_SIZES.map(s => `<option value="${s}">${s}</option>`).join('')}</select> baris</label>
         </div>
@@ -464,7 +467,8 @@
     const title = r['Kode Unit'] || r['KODE UNIT'] || r['Kode Engine'] || r['Kode Baru'] || CONFIG[k].title;
     $('modalTitle').textContent = CONFIG[k].icon + ' ' + title;
     const editBar = k === 'detail' && window.FSEdit ? `<div class="kv edit-bar"><span>Pindahkan unit ini ke lokasi lain — perubahan langsung ditulis ke sheet <b>Detail Terpasang</b> (butuh PIN).</span><button class="btn btn-primary" type="button" onclick="FSEdit.open(${r._i})">✏️ Pindah Unit</button></div>` : '';
-    $('modalBody').innerHTML = editBar + RAW[k].headers.map(h => { const fl = r._flag && r._flag[h]; return `<div class="kv" ${fl ? 'style="outline:1px solid #f59e0b"' : ''}><b>${esc(h)}${fl ? ' ⚠️' : ''}</b>${cell(k, h, r[h], r)}${fl ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">${esc(fl.reason)}<br>${esc(fl.suggest)}</div>` : ''}</div>`; }).join('');
+    const pumpBar = k === 'sumber' && window.FSEdit && /deep|sumur|bor/i.test(r['Jenis Sumber Air'] || '') ? `<div class="kv edit-bar"><span>Pompa: <b>${esc(r['Pompa'] || 'belum diisi')}</b> — pindahkan pompa ke sumur lain atau ubah kondisinya; ditulis ke kolom <b>Pompa</b> sheet <b>Sumber Air</b> (butuh PIN).</span><button class="btn btn-primary" type="button" onclick="FSEdit.pump('${esc(String(r['Kode Baru'] || '')).replace(/'/g, '')}')">🔄 Pindah Pompa Sumur</button></div>` : '';
+    $('modalBody').innerHTML = editBar + pumpBar + RAW[k].headers.map(h => { const fl = r._flag && r._flag[h]; return `<div class="kv" ${fl ? 'style="outline:1px solid #f59e0b"' : ''}><b>${esc(h)}${fl ? ' ⚠️' : ''}</b>${cell(k, h, r[h], r)}${fl ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px">${esc(fl.reason)}<br>${esc(fl.suggest)}</div>` : ''}</div>`; }).join('');
     $('modal').classList.add('show');
   }
   window.closeModal = () => $('modal').classList.remove('show');

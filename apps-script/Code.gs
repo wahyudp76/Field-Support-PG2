@@ -29,6 +29,7 @@ var SPREADSHEET_ID = '1WbGTDqC0Anh6O54twsJfiBiWcTri7FHyQjXIFrOoLz4'; // dipakai 
 var SHEET_DETAIL = 'Detail Terpasang';
 var SHEET_LOG = 'Log Perpindahan';      // dibuat otomatis bila belum ada
 var SHEET_MESIN = 'Mesin', SHEET_IRR = 'Irrigator';
+var SHEET_SUMBER = 'Sumber Air', SHEET_LOG_POMPA = 'Log Pompa Sumur'; // kolom "Pompa" di sheet Sumber Air
 var MAX_HISTORY = 400;                  // panjang maksimal kolom Keterangan
 
 function doGet(e) {
@@ -37,9 +38,9 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 6, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 7, time: new Date().toISOString(), info: info });
   }
-  return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install) atau ?action=ping' });
+  return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | pump) atau ?action=ping' });
 }
 
 function doPost(e) {
@@ -55,6 +56,7 @@ function doPost(e) {
   if (body.action === 'move') return move_(body);
   if (body.action === 'withdraw') return withdraw_(body);
   if (body.action === 'install') return install_(body);
+  if (body.action === 'pump') return pump_(body);
   return out_({ ok: false, error: 'Aksi tidak dikenal: ' + body.action });
 }
 
@@ -274,6 +276,52 @@ function install_(b) {
     log_(ss, [new Date(), b.user || '', row, eng, irr, 'PASANG BARU', '', '', lokasi, wil, rowObj['Kode Air'] || '', rowObj['Sumber Air'] || '',
       String(m.keterangan || '') + (upd.mesin ? ' | Mesin → ' + upd.mesin : '') + (upd.irrigator ? ' | Irrigator → ' + upd.irrigator : '')]);
     return out_({ ok: true, row: row, placed: placed, afterRow: ref, rowData: rowObj, modes: modes, status: upd, noFixed: noFix });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message || err) });
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- pompa sumur bor: ubah kolom "Pompa" di sheet Sumber Air ----------
+ * body.changes = [{kode:'SW08001', pompa:'Kosong', expect:'Ada Pompa'}, {kode:'SW08007', pompa:'Ada Pompa'}]
+ * Hanya kolom "Pompa" yang ditulis (nilai teks). Kolom Status/Update dibiarkan (bila berumus akan ikut berubah sendiri).
+ */
+function pump_(b) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID), sh = ss.getSheetByName(SHEET_SUMBER);
+    if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_SUMBER + '" tidak ditemukan' });
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var cKode = headers.indexOf('Kode Baru') + 1, cPompa = headers.indexOf('Pompa') + 1, cLok = headers.indexOf('Lokasi') + 1, cJenis = headers.indexOf('Jenis Sumber Air') + 1, cStatus = headers.indexOf('Status') + 1, cUpd = headers.indexOf('Update') + 1;
+    if (!cKode || !cPompa) return out_({ ok: false, error: 'Kolom "Kode Baru" / "Pompa" tidak ada di header sheet Sumber Air' });
+    var changes = Array.isArray(b.changes) ? b.changes : [];
+    if (!changes.length) return out_({ ok: false, error: 'Tidak ada perubahan' });
+    var allowed = ['Ada Pompa', 'Kosong', 'Rusak'];
+    var codes = sh.getRange(2, cKode, lastRow - 1, 1).getValues().map(function (v) { return String(v[0]).trim().toUpperCase(); });
+    var plan = [];
+    for (var i = 0; i < changes.length; i++) {
+      var ch = changes[i], kode = String(ch.kode || '').trim().toUpperCase(), val = String(ch.pompa || '').trim();
+      if (allowed.indexOf(val) < 0) return out_({ ok: false, error: 'Nilai Pompa tidak valid: ' + val + ' (pakai Ada Pompa / Kosong / Rusak)' });
+      var idx = codes.indexOf(kode); if (idx < 0) return out_({ ok: false, error: 'Kode ' + kode + ' tidak ditemukan di sheet Sumber Air' });
+      if (codes.indexOf(kode, idx + 1) >= 0) return out_({ ok: false, error: 'Kode ' + kode + ' ganda di sheet Sumber Air — rapikan dulu' });
+      var row = idx + 2, cur = String(sh.getRange(row, cPompa).getDisplayValue()).trim();
+      if (ch.expect !== undefined && ch.expect !== null && String(ch.expect).trim() !== cur) return out_({ ok: false, error: 'Data ' + kode + ' sudah berubah (Pompa sekarang "' + (cur || 'kosong') + '"). Refresh dashboard lalu ulangi.' });
+      plan.push({ kode: kode, row: row, from: cur, to: val, lokasi: cLok ? sh.getRange(row, cLok).getDisplayValue() : '', jenis: cJenis ? sh.getRange(row, cJenis).getDisplayValue() : '' });
+    }
+    var results = [];
+    for (var j = 0; j < plan.length; j++) {
+      var p = plan[j]; sh.getRange(p.row, cPompa).setValue(p.to);
+      results.push({ kode: p.kode, row: p.row, from: p.from, to: p.to, lokasi: p.lokasi });
+    }
+    SpreadsheetApp.flush();
+    for (var k = 0; k < results.length; k++) { var r = results[k]; r.status = cStatus ? sh.getRange(r.row, cStatus).getDisplayValue() : ''; r.update = cUpd ? sh.getRange(r.row, cUpd).getDisplayValue() : ''; }
+    var lg = ss.getSheetByName(SHEET_LOG_POMPA);
+    if (!lg) { lg = ss.insertSheet(SHEET_LOG_POMPA); lg.appendRow(['Waktu', 'Pengguna', 'Aksi', 'Kode Sumur', 'Lokasi', 'Baris', 'Pompa Lama', 'Pompa Baru', 'Keterangan']); lg.setFrozenRows(1); }
+    var aksi = String(b.mode || (plan.length > 1 ? 'PINDAH POMPA' : 'UBAH POMPA')).toUpperCase(), note = String(b.keterangan || '');
+    if (plan.length > 1) note = (note ? note + ' | ' : '') + plan.map(function (x) { return x.kode; }).join(' → ');
+    results.forEach(function (r) { lg.appendRow([new Date(), b.user || '', aksi, r.kode, r.lokasi, r.row, r.from, r.to, note]); });
+    return out_({ ok: true, results: results });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }

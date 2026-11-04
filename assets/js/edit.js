@@ -305,6 +305,86 @@
     setTimeout(() => $('ed-lok').focus(), 50);
   }
 
+  /* ---------- pompa sumur bor: pindah / ubah kondisi kolom "Pompa" di sheet Sumber Air ---------- */
+  const POMPA = ['Ada Pompa', 'Kosong', 'Rusak'];
+  const isDW = r => /deep|sumur|bor/i.test(String(r[sumberCols.jenis] || ''));
+  function wellLabel(r) { return r['Kode Baru'] + ' · ' + String(r['Lokasi'] || '').trim() + ' · ' + String(r['Wilayah'] || '').trim() + (r['Pompa'] ? ' · ' + r['Pompa'] : ' · (Pompa belum diisi)'); }
+  function pump(kode) {
+    ensureModal();
+    const S = F().RAW && F().RAW.sumber; if (!S || S.error) return toast('Data Sumber Air belum siap', true);
+    if (!apiUrl()) return setup(() => pump(kode));
+    if (!S.headers.includes('Pompa')) return toast('Kolom "Pompa" tidak ada di sheet Sumber Air', true);
+    const wells = S.rows.filter(isDW).sort((a, b) => String(a['Kode Baru']).localeCompare(String(b['Kode Baru'])));
+    const wilsAll = [...new Set(wells.map(r => String(r['Wilayah'] || '').trim()).filter(Boolean))].sort();
+    const sel = wells.find(r => r['Kode Baru'] === kode);
+    const withPump = wells.filter(r => /ada/i.test(r['Pompa'] || '')), noPump = wells.filter(r => !/ada/i.test(r['Pompa'] || ''));
+    const cnt = { ada: withPump.length, kosong: wells.filter(r => /kosong/i.test(r['Pompa'] || '')).length, rusak: wells.filter(r => /rusak/i.test(r['Pompa'] || '')).length, blank: wells.filter(r => !r['Pompa']).length };
+    const opt = (list, cur) => list.map(r => `<option value="${esc(r['Kode Baru'])}" ${r['Kode Baru'] === cur ? 'selected' : ''}>${esc(wellLabel(r))}</option>`).join('');
+    const defFrom = sel && /ada/i.test(sel['Pompa'] || '') ? sel['Kode Baru'] : '', defTo = sel && !/ada/i.test(sel['Pompa'] || '') ? sel['Kode Baru'] : '';
+    $('editTitle').textContent = '🔄 Pindah Pompa Sumur Bor';
+    $('editBody').innerHTML = `
+      <div class="edit-cur"><b>Ketersediaan pompa sumur bor</b>
+        <div class="edit-grid4"><div><span>Ada Pompa</span>${cnt.ada}</div><div><span>Kosong</span>${cnt.kosong}</div><div><span>Rusak</span>${cnt.rusak}</div><div><span>Belum diisi</span>${cnt.blank}</div></div>
+        <div class="edit-ket">Perubahan langsung ditulis ke kolom <b>Pompa</b> sheet <b>Sumber Air</b> (nilai: Ada Pompa / Kosong / Rusak) dan dicatat di sheet <b>Log Pompa Sumur</b>. Kolom Status/Update tidak disentuh.</div></div>
+      <div class="edit-tabs"><button type="button" class="btn ${defTo && !defFrom ? 'btn-outline' : 'btn-primary'}" id="pp-mode-move">🔄 Pindah pompa antar sumur</button><button type="button" class="btn ${defTo && !defFrom ? 'btn-primary' : 'btn-outline'}" id="pp-mode-set">✏️ Ubah kondisi pompa satu sumur</button></div>
+      <form id="ppForm" class="edit-form" autocomplete="off">
+        <label class="wide">Filter wilayah <select id="pp-wil"><option value="">Semua wilayah</option>${wilsAll.map(w => `<option ${sel && w === String(sel['Wilayah']).trim() ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select></label>
+        <div class="wide pp-move">
+          <label>Sumur asal (pompa diambil) <select id="pp-from" required><option value="">— pilih sumur yang ada pompanya —</option>${opt(withPump, defFrom)}</select><small class="edit-hint" id="pp-from-i"></small></label>
+          <label>Sumur tujuan (pompa dipasang) <select id="pp-to" required><option value="">— pilih sumur kosong / rusak —</option>${opt(noPump, defTo)}</select><small class="edit-hint" id="pp-to-i"></small></label>
+          <label>Kondisi sumur asal setelah pompa diambil <select id="pp-from-val"><option>Kosong</option><option>Rusak</option></select></label>
+        </div>
+        <div class="wide pp-set" style="display:none">
+          <label>Sumur <select id="pp-one"><option value="">— pilih sumur —</option>${opt(wells, sel ? sel['Kode Baru'] : '')}</select><small class="edit-hint" id="pp-one-i"></small></label>
+          <label>Kondisi pompa baru <select id="pp-one-val">${POMPA.map(v => `<option ${sel && v === sel['Pompa'] ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        </div>
+        <label class="wide">Keterangan (opsional) <input id="pp-ket" placeholder="mis. pompa dipindah karena sumur asal non irigasi"></label>
+        <label>PIN <input id="pp-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
+        <label>Nama pengisi <input id="pp-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="pp-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="pp-cancel">Batal</button><button type="submit" class="btn btn-primary" id="pp-save">💾 Simpan ke Sheet</button></div>
+        <div class="wide edit-msg" id="pp-msg"></div>
+      </form>`;
+    $('editModal').classList.add('show');
+    $('pp-cancel').onclick = close; $('pp-setup').onclick = () => setup(() => pump(kode));
+    let mode = defTo && !defFrom ? 'set' : 'move';
+    const setMode = m => { mode = m; $('pp-mode-move').className = 'btn ' + (m === 'move' ? 'btn-primary' : 'btn-outline'); $('pp-mode-set').className = 'btn ' + (m === 'set' ? 'btn-primary' : 'btn-outline'); document.querySelector('.pp-move').style.display = m === 'move' ? '' : 'none'; document.querySelector('.pp-set').style.display = m === 'set' ? '' : 'none'; $('pp-from').required = $('pp-to').required = m === 'move'; };
+    $('pp-mode-move').onclick = () => setMode('move'); $('pp-mode-set').onclick = () => setMode('set'); setMode(mode);
+    const byKode = k => wells.find(r => r['Kode Baru'] === k);
+    const info = (id, hint) => { const r = byKode($(id).value), el = $(hint); if (!r) { el.textContent = ''; return; } const parts = [r[sumberCols.jenis], 'Kondisi sumur: ' + (String(r['Kondisi Sumur'] || '–').trim()), r['Status'] ? 'Status: ' + r['Status'] : '', r['Update'] ? 'Update: ' + r['Update'] : '', r[sumberCols.aktif] ? String(r[sumberCols.aktif]).trim() : '']; el.textContent = parts.filter(Boolean).join(' · '); el.className = 'edit-hint' + (/rusak/i.test(r['Kondisi Sumur'] || '') ? ' warn' : ''); };
+    const applyWil = () => { const w = $('pp-wil').value; [['pp-from', withPump], ['pp-to', noPump], ['pp-one', wells]].forEach(([id, list]) => { const cur = $(id).value; const first = $(id).options[0].outerHTML; $(id).innerHTML = first + opt(list.filter(r => !w || String(r['Wilayah']).trim() === w), cur); }); info('pp-from', 'pp-from-i'); info('pp-to', 'pp-to-i'); info('pp-one', 'pp-one-i'); };
+    $('pp-wil').onchange = applyWil; applyWil();
+    $('pp-from').onchange = () => info('pp-from', 'pp-from-i'); $('pp-to').onchange = () => info('pp-to', 'pp-to-i'); $('pp-one').onchange = () => { info('pp-one', 'pp-one-i'); const r = byKode($('pp-one').value); if (r && POMPA.includes(r['Pompa'])) $('pp-one-val').value = r['Pompa']; };
+    $('ppForm').onsubmit = async e => {
+      e.preventDefault();
+      const pin = $('pp-pin').value.trim(), msg = $('pp-msg'), btn = $('pp-save'), err = m => { msg.textContent = m; msg.className = 'wide edit-msg err'; };
+      if (!pin) return err('PIN wajib diisi.');
+      let changes = [];
+      if (mode === 'move') {
+        const a = byKode($('pp-from').value), b = byKode($('pp-to').value);
+        if (!a || !b) return err('Pilih sumur asal dan sumur tujuan.');
+        if (a === b) return err('Sumur asal dan tujuan sama.');
+        if (/rusak/i.test(b['Kondisi Sumur'] || '') && !confirm('Kondisi sumur tujuan ' + b['Kode Baru'] + ' tercatat RUSAK. Tetap pasang pompa di sana?')) return;
+        changes = [{ kode: a['Kode Baru'], pompa: $('pp-from-val').value, expect: a['Pompa'] || '' }, { kode: b['Kode Baru'], pompa: 'Ada Pompa', expect: b['Pompa'] || '' }];
+      } else {
+        const r = byKode($('pp-one').value); if (!r) return err('Pilih sumur.');
+        if ((r['Pompa'] || '') === $('pp-one-val').value) return err('Kondisi pompa tidak berubah.');
+        changes = [{ kode: r['Kode Baru'], pompa: $('pp-one-val').value, expect: r['Pompa'] || '' }];
+      }
+      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menyimpan ke spreadsheet…';
+      try {
+        const j = await post({ action: 'pump', pin, user: $('pp-user').value.trim(), mode: mode === 'move' ? 'PINDAH POMPA' : 'UBAH POMPA', changes, keterangan: $('pp-ket').value.trim() });
+        if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
+        localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('pp-user').value.trim());
+        (j.results || []).forEach(x => { const r = byKode(x.kode); if (!r) return; r['Pompa'] = x.to; if (x.status !== undefined && x.status !== '') r['Status'] = x.status; if (x.update !== undefined && x.update !== '') r['Update'] = x.update; if (F().refreshRow) F().refreshRow('sumber', r); });
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Tersimpan: ' + (j.results || []).map(x => x.kode + ' ' + (x.from || '(kosong)') + ' → ' + x.to + ' (baris ' + x.row + ')').join(' ; ') + '. Menyinkronkan ulang…';
+        toast(mode === 'move' ? 'Pompa dipindah ' + changes[0].kode + ' → ' + changes[1].kode + ' ✔' : 'Pompa ' + changes[0].kode + ' → ' + changes[0].pompa + ' ✔');
+        setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1800);
+      } catch (ex) {
+        msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (ex.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : ex.message); btn.disabled = false;
+      }
+    };
+  }
+
   /* ---------- pengaturan URL Web App ---------- */
   function setup(after) {
     ensureModal();
@@ -325,5 +405,5 @@
     $('setupForm').onsubmit = e => { e.preventDefault(); const u = $('su-url').value.trim(); if (u && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u) && !confirm('URL tidak tampak seperti Web App Apps Script (…/exec). Simpan juga?')) return; if (u) localStorage.setItem(LS_URL, u); else localStorage.removeItem(LS_URL); toast(u ? 'URL Web App disimpan' : 'URL Web App dihapus'); close(); if (u && after) after(); };
   }
 
-  window.FSEdit = { open, install, setup, suggest, enabled: () => true, apiUrl };
+  window.FSEdit = { open, install, pump, setup, suggest, enabled: () => true, apiUrl };
 })();
