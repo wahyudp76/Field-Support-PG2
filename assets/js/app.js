@@ -165,7 +165,17 @@
   function loadCache() {
     try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (!c || !c.sheets || Date.now() - c.at > 7 * 864e5) return null; return c; } catch (e) { return null; }
   }
+  // sinkron otomatis DITUNDA selama kartu tulis-balik (Pindah Unit / Pasang Unit / Tarik ke Bengkel / Pompa) sedang terbuka
+  const editOpen = () => { const m = document.getElementById('editModal'); return !!(m && m.classList.contains('show')); };
+  function scheduleAuto(ms) {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (editOpen()) { $('syncInfo').textContent = 'Sinkron otomatis ditunda (form terbuka)'; scheduleAuto(30000); return; }
+      loadData(false);
+    }, ms);
+  }
   window.loadData = async function (manual) {
+    if (!manual && editOpen()) { scheduleAuto(30000); return; }
     if (loading) return; loading = true;
     const btn = $('refreshBtn'); btn.disabled = true; $('syncInfo').textContent = window.__fromCache ? $('syncInfo').textContent : 'Sinkron…'; $('syncDot').className = 'dot'; window.__fromCache = false;
     try {
@@ -178,7 +188,7 @@
       toast('Gagal memuat data: ' + e.message, true);
     } finally {
       loading = false; btn.disabled = false; $('loader').classList.add('hide');
-      if (APP_CONFIG.autoRefreshMs) { clearTimeout(timer); timer = setTimeout(() => document.hidden ? loadData(false) : loadData(false), APP_CONFIG.autoRefreshMs); }
+      if (APP_CONFIG.autoRefreshMs) scheduleAuto(APP_CONFIG.autoRefreshMs);
     }
   };
 
@@ -1122,7 +1132,7 @@
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('sheetLink').href = 'https://docs.google.com/spreadsheets/d/' + APP_CONFIG.spreadsheetId;
   window.addEventListener('hashchange', () => switchTab(location.hash.replace('#', '')));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && APP_CONFIG.autoRefreshMs) { clearTimeout(timer); timer = setTimeout(() => loadData(false), 1500); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && APP_CONFIG.autoRefreshMs) scheduleAuto(1500); });
   window.addEventListener('error', e => { if (/Chart/.test(e.message)) toast('Library grafik gagal dimuat — periksa koneksi internet', true); });
   if (typeof Chart === 'undefined') toast('Library grafik (Chart.js) tidak termuat — grafik disembunyikan', true);
   else Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
