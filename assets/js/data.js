@@ -157,6 +157,9 @@
       if (cfg.endHeader && rawHeaders[i].toLowerCase() === cfg.endHeader.toLowerCase()) { last = i + 1; break; }
     }
     const headers = rawHeaders.slice(0, last);
+    // Pengaman: bila nama sheet tidak ada, gviz diam-diam mengembalikan sheet PERTAMA → deteksi lewat kolom kunci agar tidak menampilkan data yang salah
+    const must = cfg.keyHeader || cfg.endHeader;
+    if (must && !headers.some(h => h.toLowerCase() === String(must).toLowerCase())) throw new Error('Sheet "' + cfg.name + '" tidak berisi kolom "' + must + '" — nama sheet berubah atau spreadsheet mengembalikan sheet lain');
 
     // simpan nomor baris sheet asli (header = baris 1) agar baris kosong di tengah tidak menggeser nomor baris
     const sheetRow = []; const body = [];

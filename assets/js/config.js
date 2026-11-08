@@ -20,8 +20,8 @@ window.APP_CONFIG = {
   sheets: {
     detail:    { name: 'Detail Terpasang', endHeader: 'Kode Air' },
     sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
-    mesin:     { name: 'Mesin',            endHeader: null       }, // berhenti di header kosong pertama
-    irrigator: { name: 'Irrigator',        endHeader: null       }, // berhenti di header kosong pertama (kolom inspeksi SKOR/KONDISI ikut terbaca)
+    mesin:     { name: 'Mesin',            endHeader: null, keyHeader: 'Kode Unit' }, // berhenti di header kosong pertama
+    irrigator: { name: 'Irrigator',        endHeader: null, keyHeader: 'KODE UNIT' }, // berhenti di header kosong pertama (kolom inspeksi SKOR/KONDISI ikut terbaca)
     pipa:      { name: 'Pipa',             endHeader: 'Grand Total' }, // matriks ringkasan: Placement × jenis × kondisi (satuan: batang)
     // Sheet "Unit Pendukung" berisi 2 tabel berdampingan → dibaca sebagai 2 key (block = regex header penanda blok)
     pendukung: { name: 'Unit Pendukung',   endHeader: null, block: '^kode\\s*unit$' },  // tb_pendukung: Wilayah, Aktivitas(jenis unit), Kode Unit
