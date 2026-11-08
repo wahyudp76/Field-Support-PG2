@@ -309,7 +309,7 @@ tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: bac
 .edit-form .edit-hint{display:block;font-size:11px;color:#2e7d32;margin-top:3px;min-height:14px}
 .edit-form .edit-hint.warn{color:#c62828}
 .tbl-tools #detail-install{padding:6px 12px}
-.edit-form .edit-cnt{float:right;font-size:10px;font-weight:600;color:#2e7d32;background:#e8f5e9;border-radius:10px;padding:1px 7px;text-transform:none}
+.edit-form .edit-cnt{display:inline-block;width:auto;float:none;margin-left:6px;vertical-align:middle;font-size:10px;font-weight:600;color:#2e7d32;background:#e8f5e9;border-radius:10px;padding:1px 7px;text-transform:none;line-height:1.5}
 
 /* pompa sumur */
 .modal .edit-body .edit-tabs{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
