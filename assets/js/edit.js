@@ -47,6 +47,39 @@
     IDX = { list, cent }; IDX_SRC = S.rows; return IDX;
   }
 
+  /* ---------- Master Lokasi: kode lokasi → wilayah (Plantation code) ---------- */
+  const MASTER_SHEET = 'Master Lokasi', LS_MASTER = 'fs_master_lokasi';
+  let MASTER = null, masterP = null;
+  function masterFromRows(rows) { const m = {}; rows.forEach(r => { const k = String(r.lok || '').trim().toUpperCase(), w = String(r.wil || '').trim().toUpperCase(); if (k && w && !m[k]) m[k] = w; }); return m; }
+  function loadMaster() {
+    if (MASTER) return Promise.resolve(MASTER);
+    if (masterP) return masterP;
+    try { const c = JSON.parse(localStorage.getItem(LS_MASTER) || 'null'); if (c && c.rows && Date.now() - c.at < 864e5) MASTER = masterFromRows(c.rows); } catch (e) { /* abaikan */ }
+    masterP = fetch(APP_CONFIG.csvUrl(MASTER_SHEET)).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(t => {
+      const raw = (window.DataLayer && DataLayer.parseCSV) ? DataLayer.parseCSV(t) : t.split('\n').map(l => l.split(','));
+      const h = (raw[0] || []).map(x => String(x || '').trim().toLowerCase());
+      const iw = h.findIndex(x => /plantation|wil/.test(x)), il = h.findIndex(x => x === 'lokasi' || /^kode\s*lokasi/.test(x));
+      if (iw < 0 || il < 0) throw new Error('Kolom "Plantation code"/"Lokasi" tidak ditemukan di sheet ' + MASTER_SHEET);
+      const rows = raw.slice(1).map(r => ({ lok: r[il], wil: r[iw] })).filter(r => r.lok && r.wil);
+      MASTER = masterFromRows(rows); try { localStorage.setItem(LS_MASTER, JSON.stringify({ at: Date.now(), rows })); } catch (e) { /* kuota */ }
+      return MASTER;
+    }).catch(e => { console.warn('Master Lokasi gagal dimuat', e); masterP = null; if (MASTER) return MASTER; throw e; });
+    return MASTER ? Promise.resolve(MASTER) : masterP;
+  }
+  const masterWil = lok => { const m = MASTER || {}; const L = String(lok || '').trim().toUpperCase(); return m[L] || m[L.replace(/\s+/g, '')] || ''; };
+  // sinkronkan select Wil dari Master Lokasi; tulis petunjuk di elemen hint
+  function syncWil(lokId, wilId, hintId) {
+    const lok = $(lokId).value.trim().toUpperCase(), el = $(hintId), sel = $(wilId); if (!el || !sel) return;
+    if (!lok) { el.textContent = ''; el.className = 'edit-hint'; sel.disabled = false; return; }
+    if (!MASTER) { el.textContent = '… memuat Master Lokasi'; el.className = 'edit-hint'; return; }
+    const w = masterWil(lok);
+    if (w) {
+      if (![...sel.options].some(o => o.value === w)) sel.add(new Option(w, w));
+      sel.value = w; el.textContent = '✓ Wil ' + w + ' (Master Lokasi)'; el.className = 'edit-hint';
+    } else { el.textContent = '⚠ ' + lok + ' tidak ada di Master Lokasi — pilih Wil manual'; el.className = 'edit-hint warn'; }
+  }
+  const lokDatalist = id => `<datalist id="${id}">${Object.keys(MASTER || {}).sort().map(k => `<option value="${esc(k)}">${esc(MASTER[k])}</option>`).join('')}</datalist>`;
+
   /* ---------- rekomendasi sumber air untuk lokasi baru ---------- */
   function suggest(lokasi, wil, limit = 8) {
     const ix = index(); if (!ix) return { exact: [], near: [], note: 'Sheet Sumber Air belum termuat' };
@@ -97,8 +130,8 @@
         <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div><div><span>Sumber Air</span>${esc(r['Sumber Air'] || '–')}</div><div><span>Kode Air</span>${esc(r['Kode Air'] || '–')}</div><div><span>Tanggal</span>${esc(r['Tanggal'] || '–')}</div><div><span>Baris sheet</span>${(r._row || r._i + 2)}</div></div>
         ${r['Keterangan'] ? `<div class="edit-ket">📝 ${esc(r['Keterangan'])}</div>` : ''}</div>
       <form id="editForm" class="edit-form" autocomplete="off">
-        <label>Lokasi baru <input id="ed-lok" required placeholder="mis. 303M / 109D1" value=""></label>
-        <label>Wil <select id="ed-wil">${wils.map(w => `<option ${w === r['Wil'] ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select></label>
+        <label>Lokasi baru <input id="ed-lok" list="ed-lok-l" required placeholder="mis. 303M / 109D1 — Wil otomatis dari Master Lokasi" value="">${lokDatalist('ed-lok-l')}<small class="edit-hint" id="ed-lok-i"></small></label>
+        <label>Wil <small class="edit-cnt" title="Diisi otomatis dari sheet Master Lokasi">auto</small><select id="ed-wil">${wils.map(w => `<option ${w === r['Wil'] ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select></label>
         <label>Tanggal pindah <input id="ed-tgl" type="date" value="${iso}"></label>
         <label>Sumber Air <select id="ed-sa"><option value="">(pilih / otomatis dari kode)</option>${jenis.map(j => `<option ${j === r['Sumber Air'] ? 'selected' : ''}>${esc(j)}</option>`).join('')}</select></label>
         <label>Kode Air <input id="ed-ka" placeholder="mis. LW08027 — atau pilih rekomendasi di bawah" value=""></label>
@@ -112,7 +145,9 @@
     $('editModal').classList.add('show');
     $('ed-cancel').onclick = close; $('ed-setup').onclick = () => setup(() => open(rowIndex)); $('ed-withdraw').onclick = () => withdraw(r);
     let t; const upd = () => { clearTimeout(t); t = setTimeout(() => renderSug(r), 180); };
-    $('ed-lok').oninput = upd; $('ed-wil').onchange = upd;
+    const wilSync = () => syncWil('ed-lok', 'ed-wil', 'ed-lok-i');
+    $('ed-lok').oninput = () => { wilSync(); upd(); }; $('ed-wil').onchange = upd;
+    loadMaster().then(() => { if (!$('ed-lok-l')) return; $('ed-lok-l').outerHTML = lokDatalist('ed-lok-l'); wilSync(); }).catch(() => {});
     $('ed-sug').onclick = e => { const b = e.target.closest('[data-kode]'); if (!b) return; $('ed-ka').value = b.dataset.kode; if (b.dataset.jenis) $('ed-sa').value = b.dataset.jenis; [...$('ed-sug').querySelectorAll('.sug')].forEach(x => x.classList.toggle('on', x === b)); };
     $('ed-ka').oninput = () => { const ix = index(); const s = ix && ix.list.find(x => x.kode === $('ed-ka').value.trim().toUpperCase()); if (s && s.jenis) $('ed-sa').value = s.jenis; };
     $('editForm').onsubmit = e => { e.preventDefault(); submit(r); };
@@ -225,7 +260,7 @@
     if (!apiUrl()) return setup(() => install());
     const R = F().RAW, mesin = R.mesin && !R.mesin.error ? R.mesin.rows : [], irr = R.irrigator && !R.irrigator.error ? R.irrigator.rows : [];
     const usedE = new Set(D.rows.map(x => String(x['Kode Engine'] || '').trim().toUpperCase()).filter(Boolean)), usedI = new Set(D.rows.map(x => String(x['Kode Irigator'] || '').trim().toUpperCase()).filter(Boolean));
-    const wils = [...new Set(D.rows.map(x => String(x['Wil'] || '').trim()).filter(Boolean))].sort();
+    const wils = [...new Set(D.rows.map(x => String(x['Wil'] || '').trim()).concat(Object.values(MASTER || {})).filter(Boolean))].sort();
     const bCnt = {}; D.rows.forEach(x => { const b = String(x['Bengkel'] || '').trim(); if (b) bCnt[b] = (bCnt[b] || 0) + 1; }); const bkl = Object.keys(bCnt).sort((a, b) => bCnt[b] - bCnt[a]);
     const jenis = [...new Set((R.sumber && !R.sumber.error ? R.sumber.rows : []).map(x => String(x[sumberCols.jenis] || '').trim()).filter(Boolean))].sort();
     const today = new Date(), iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -243,8 +278,8 @@
       <form id="insForm" class="edit-form" autocomplete="off">
         <label>Tanggal pasang <input id="in-tgl" type="date" value="${iso}" required></label>
         <label>Bengkel <input id="in-bkl" list="in-bkl-l" placeholder="mis. FM4 / OP2 / PG2" required value="${esc(bkl[0] || '')}"><datalist id="in-bkl-l">${bkl.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>
-        <label>Lokasi <input id="ed-lok" required placeholder="mis. 303M / 109D1"></label>
-        <label>Wil <select id="ed-wil">${wils.map(w => `<option>${esc(w)}</option>`).join('')}</select></label>
+        <label>Lokasi <input id="ed-lok" list="in-lok-l" required placeholder="mis. 303M / 109D1 — Wil otomatis dari Master Lokasi">${lokDatalist('in-lok-l')}<small class="edit-hint" id="in-lok-i"></small></label>
+        <label>Wil <small class="edit-cnt" title="Diisi otomatis dari sheet Master Lokasi">auto</small><select id="ed-wil">${wils.map(w => `<option>${esc(w)}</option>`).join('')}</select></label>
         <label>Kode Engine <span class="edit-cnt">${listE.length} standby</span><input id="in-eng" list="in-eng-l" placeholder="pilih engine Standby (kosongkan bila tanpa engine)"><datalist id="in-eng-l">${listE.map(x => `<option value="${esc(x.k)}">${esc('Standby' + (x.p ? ' · ' + x.p + ' HP' : '') + (x.sp ? ' · ' + x.sp : ''))}</option>`).join('')}</datalist><small id="in-eng-i" class="edit-hint"></small></label>
         <label>Kode Irigator <span class="edit-cnt">${listI.length} standby</span><input id="in-irr" list="in-irr-l" placeholder="pilih irigator Standby (kosong utk drip)"><datalist id="in-irr-l">${listI.map(x => `<option value="${esc(x.k)}">Standby</option>`).join('')}</datalist><small id="in-irr-i" class="edit-hint"></small></label>
         <label>Sumber Air <select id="ed-sa"><option value="">(pilih / otomatis dari kode)</option>${jenis.map(j => `<option>${esc(j)}</option>`).join('')}</select></label>
@@ -261,7 +296,9 @@
     $('editModal').classList.add('show');
     $('in-cancel').onclick = close; $('in-setup').onclick = () => setup(() => install());
     let t; const upd = () => { clearTimeout(t); t = setTimeout(() => renderSug(null), 180); };
-    $('ed-lok').oninput = upd; $('ed-wil').onchange = upd;
+    const wilSync = () => syncWil('ed-lok', 'ed-wil', 'in-lok-i');
+    $('ed-lok').oninput = () => { wilSync(); upd(); }; $('ed-wil').onchange = upd;
+    loadMaster().then(() => { if (!$('in-lok-l')) return; $('in-lok-l').outerHTML = lokDatalist('in-lok-l'); wilSync(); upd(); }).catch(() => { if ($('in-lok-i')) { $('in-lok-i').textContent = '⚠ Master Lokasi tidak termuat — pilih Wil manual'; $('in-lok-i').className = 'edit-hint warn'; } });
     $('ed-sug').onclick = e => { const b = e.target.closest('[data-kode]'); if (!b) return; $('ed-ka').value = b.dataset.kode; if (b.dataset.jenis) $('ed-sa').value = b.dataset.jenis; [...$('ed-sug').querySelectorAll('.sug')].forEach(x => x.classList.toggle('on', x === b)); };
     $('ed-ka').oninput = () => { const ix = index(); const s = ix && ix.list.find(x => x.kode === $('ed-ka').value.trim().toUpperCase()); if (s && s.jenis) $('ed-sa').value = s.jenis; };
     const engInfo = () => { const k = $('in-eng').value.trim().toUpperCase(), m = optE.find(x => x.k === k), el = $('in-eng-i'); el.textContent = !k ? '' : !m ? '⚠ kode tidak ada di sheet Mesin' : (usedE.has(k) ? '⚠ sudah terpasang di ' + (D.rows.find(x => String(x['Kode Engine']).toUpperCase() === k) || {})['Lokasi'] : !isStandby(m.st) ? '⚠ status di sheet Mesin: ' + (m.st || 'kosong') + ' (bukan Standby)' : '✓ Standby' + (m.p ? ' · Power ' + m.p : '') + ' · Jenis ' + k.replace(/\d+$/, '')); el.className = 'edit-hint' + (el.textContent.startsWith('⚠') ? ' warn' : ''); };
