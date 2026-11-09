@@ -460,37 +460,43 @@
     const missing = wells.filter(r => /ada/i.test(r['Pompa'] || '') && !toks(r[sumberCols.lok]).some(c => recorded.has(c)) && !toks(r[sumberCols.dekat]).some(c => recorded.has(c)))
       .map(r => ({ r, kode: r['Kode Baru'], lokasi: (toks(r[sumberCols.lok])[0] || String(r[sumberCols.lok] || '').trim().toUpperCase().replace(/\s+/g, '')), wil: String(r['Wilayah'] || '').trim(), kondisi: String(r['Kondisi Sumur'] || '').trim(), status: String(r['Status'] || '').trim(), upd: String(r['Update'] || '').trim() }))
       .sort((a, b) => a.kode.localeCompare(b.kode));
-    const gone = P.rows.filter(x => x['Kode Sumur'] && !/ada/i.test(x['Pompa (Sumber Air)'] || ''));
+    const gone = P.rows.filter(x => x['Kode Sumur'] && !/ada/i.test(x['Pompa (Sumber Air)'] || '')).map(x => ({ lokasi: x[lokH], kode: x['Kode Sumur'], pompa: String(x['Pompa (Sumber Air)'] || '').trim(), tgl: x['Tgl Maintenance terakhir'] || '', merk: x['Jenis/Merk Pompa'] || '' }));
     const pumps = wells.filter(r => /ada/i.test(r['Pompa'] || '')).length;
     $('editTitle').textContent = '🔄 Sinkron Pompa Sumur dari Sumber Air';
     $('editBody').innerHTML = `
       <div class="edit-cur"><b>Ringkasan</b>
         <div class="edit-grid4"><div><span>Sumur bor PG2 (Sumber Air)</span>${wells.length}</div><div><span>Ada Pompa</span>${pumps}</div><div><span>Catatan di Pompa Sumur</span>${P.rows.length}</div><div><span>Belum tercatat</span>${missing.length}</div></div>
-        <div class="edit-ket">Baris baru akan <b>ditambahkan</b> ke sheet <b>Pompa Sumur</b> (LOKASI, Kondisi Akhir Sumur dari <i>Kondisi Sumur</i>, Keterangan "SIAP PAKAI" bila status Siap Operasi/Standby; kolom No & rumus meniru baris terakhir). Detail maintenance/komponen dilengkapi manual di sheet. Tidak ada baris yang dihapus.</div></div>
+        <div class="edit-ket">Posisi pompa mengikuti <b>Sumber Air</b>: (1) sumur "Ada Pompa" yang belum tercatat → baris baru <b>ditambahkan</b> ke sheet Pompa Sumur (detail maintenance dilengkapi manual); (2) catatan yang sumurnya sudah <b>tidak ber-pompa</b> → baris <b>dipindahkan ke sheet "Pompa Sumur (Arsip)"</b> (tidak hilang, bisa disalin kembali bila perlu). Kolom No diperbaiki otomatis.</div></div>
       <form id="ssForm" class="edit-form" autocomplete="off">
+        <div class="wide"><b>1. Tambahkan sumur ber-pompa yang belum tercatat (${missing.length})</b></div>
         <div class="wide">${missing.length ? `<table class="ss-tbl"><thead><tr><th><input type="checkbox" id="ss-all" checked></th><th>Kode</th><th>Lokasi</th><th>Wil</th><th>Kondisi Sumur</th><th>Status</th><th>Update</th></tr></thead><tbody>${missing.map((m, i) => `<tr><td><input type="checkbox" class="ss-chk" data-i="${i}" checked></td><td><b>${esc(m.kode)}</b></td><td>${esc(m.lokasi)}</td><td>${esc(m.wil)}</td><td>${esc(m.kondisi || '–')}</td><td>${esc(m.status || '–')}</td><td>${esc(m.upd || '–')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">✓ Semua sumur ber-pompa di Sumber Air sudah punya catatan di Pompa Sumur.</div>'}</div>
-        ${gone.length ? `<div class="wide sug-warn">ℹ️ ${gone.length} catatan di Pompa Sumur yang kolom Pompa-nya di Sumber Air bukan "Ada Pompa" (pompa sudah dipindah/rusak) — tidak diubah otomatis: ${gone.map(x => esc(x[lokH]) + ' (' + esc(x['Pompa (Sumber Air)'] || 'kosong') + ')').join(', ')}</div>` : ''}
+        <div class="wide"><b>2. Arsipkan catatan yang pompanya sudah dipindah (${gone.length})</b></div>
+        <div class="wide">${gone.length ? `<table class="ss-tbl"><thead><tr><th><input type="checkbox" id="ss-rall" checked></th><th>Lokasi</th><th>Kode</th><th>Pompa (Sumber Air)</th><th>Tgl Maint.</th><th>Merk</th></tr></thead><tbody>${gone.map((g, i) => `<tr><td><input type="checkbox" class="ss-rm" data-i="${i}" checked></td><td><b>${esc(g.lokasi)}</b></td><td>${esc(g.kode)}</td><td>${esc(g.pompa || 'kosong')}</td><td>${esc(g.tgl || '–')}</td><td>${esc(g.merk || '–')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">✓ Tidak ada catatan di lokasi tanpa pompa.</div>'}</div>
         <label>PIN <input id="ss-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
         <label>Nama pengisi <input id="ss-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
-        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ss-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ss-cancel">Tutup</button><button type="submit" class="btn btn-primary" id="ss-save" ${missing.length ? '' : 'disabled'}>➕ Tambahkan ke sheet Pompa Sumur</button></div>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ss-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ss-cancel">Tutup</button><button type="submit" class="btn btn-primary" id="ss-save" ${missing.length || gone.length ? '' : 'disabled'}>🔄 Terapkan ke sheet Pompa Sumur</button></div>
         <div class="wide edit-msg" id="ss-msg"></div>
       </form>`;
     $('editModal').classList.add('show');
     $('ss-cancel').onclick = close; $('ss-setup').onclick = () => setup(() => syncSumur());
     if ($('ss-all')) $('ss-all').onchange = () => document.querySelectorAll('.ss-chk').forEach(c => { c.checked = $('ss-all').checked; });
+    if ($('ss-rall')) $('ss-rall').onchange = () => document.querySelectorAll('.ss-rm').forEach(c => { c.checked = $('ss-rall').checked; });
     $('ssForm').onsubmit = async e => {
       e.preventDefault();
       const pin = $('ss-pin').value.trim(), msg = $('ss-msg'), btn = $('ss-save');
       const sel = [...document.querySelectorAll('.ss-chk:checked')].map(c => missing[+c.dataset.i]);
       if (!pin) { msg.textContent = 'PIN wajib diisi.'; msg.className = 'wide edit-msg err'; return; }
-      if (!sel.length) { msg.textContent = 'Pilih minimal satu sumur.'; msg.className = 'wide edit-msg err'; return; }
-      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menambahkan ' + sel.length + ' baris ke sheet Pompa Sumur…';
+      const rem = [...document.querySelectorAll('.ss-rm:checked')].map(c => gone[+c.dataset.i]);
+      if (!sel.length && !rem.length) { msg.textContent = 'Pilih minimal satu perubahan.'; msg.className = 'wide edit-msg err'; return; }
+      if (rem.length && !confirm(rem.length + ' catatan akan dipindahkan ke sheet "Pompa Sumur (Arsip)" dan dihapus dari Pompa Sumur:\n' + rem.map(g => g.lokasi).join(', ') + '\n\nLanjutkan?')) return;
+      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menerapkan: +' + sel.length + ' baris, arsip ' + rem.length + ' baris…';
       try {
-        const j = await post({ action: 'syncPompaSumur', pin, user: $('ss-user').value.trim(), items: sel.map(m => ({ lokasi: m.lokasi, kode: m.kode, kondisi: m.kondisi, status: m.status })) });
+        const j = await post({ action: 'syncPompaSumur', pin, user: $('ss-user').value.trim(), items: sel.map(m => ({ lokasi: m.lokasi, kode: m.kode, kondisi: m.kondisi, status: m.status })), remove: rem.map(g => ({ lokasi: g.lokasi, pompa: g.pompa })) });
+        if (j.ok && rem.length && !('archived' in j)) throw new Error('Web App masih versi lama (belum mendukung arsip). Salin ulang Code.gs v10 lalu deploy versi baru.');
         if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
         localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('ss-user').value.trim());
-        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ ' + (j.added || []).length + ' baris ditambahkan' + ((j.added || []).length ? ' (' + j.added.map(a => a.lokasi + '→' + a.row).join(', ') + ')' : '') + ((j.skipped || []).length ? ' · dilewati: ' + j.skipped.map(x => x.lokasi + ' ' + x.reason).join(', ') : '') + '. Menyinkronkan ulang…';
-        toast((j.added || []).length + ' catatan pompa sumur ditambahkan ✔');
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ ' + (j.added || []).length + ' baris ditambahkan' + ((j.added || []).length ? ' (' + j.added.map(a => a.lokasi + '→' + a.row).join(', ') + ')' : '') + ' · ' + (j.archived || []).length + ' diarsipkan' + ((j.archived || []).length ? ' (' + j.archived.map(a => a.lokasi).join(', ') + ')' : '') + ((j.skipped || []).length ? ' · dilewati: ' + j.skipped.map(x => x.lokasi + ' ' + x.reason).join(', ') : '') + '. Menyinkronkan ulang…';
+        toast('Pompa Sumur disinkronkan: +' + (j.added || []).length + ' / arsip ' + (j.archived || []).length + ' ✔');
         setTimeout(() => { close(); F().loadData && F().loadData(false); }, 2000);
       } catch (ex) {
         msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (ex.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : ex.message); btn.disabled = false;
