@@ -159,3 +159,4 @@ Keamanan: PIN diverifikasi di Apps Script (tidak ada di kode web); baris dicocok
 Di modal **⚠️ peringatan data** ada tombol **🛠 Repair all format**: memperbaiki otomatis sel yang salah format — tanggal tak baku (ditulis ulang sebagai tanggal asli), angka dengan pemisah ribuan/desimal keliru (ditulis ulang sebagai angka), dan sel rumus error `#REF!/#N/A/...` (rumus disalin ulang dari baris terdekat yang sehat). Memerlukan PIN; nilai lama dicatat di sheet **Log Perbaikan Format**. Temuan duplikat/relasi/nilai ekstrem tetap manual.
 
 Parser tanggal juga mengenali tampilan `29-Mei-2026`, `29 Mei 2026`, `2026/05/29`, `29.05.2026`, `29-05-26`, serial Excel.
+<!-- deploy 1794248128 -->
