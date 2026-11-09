@@ -329,6 +329,7 @@
           <span class="info" id="${k}-info"></span>
           ${k === 'detail' && window.FSEdit ? '<button class="btn btn-primary" type="button" id="detail-install" onclick="FSEdit.install()" title="Tambah baris unit baru di sheet Detail Terpasang">➕ Pasang Unit</button>' : ''}
           ${k === 'sumber' && window.FSEdit ? '<button class="btn btn-primary" type="button" id="sumber-pump" onclick="FSEdit.pump()" title="Pindah / ubah ketersediaan pompa sumur bor (kolom Pompa di sheet Sumber Air)">🔄 Pindah Pompa Sumur</button>' : ''}
+          ${k === 'sumur' && window.FSEdit ? '<button class="btn btn-primary" type="button" id="sumur-sync" onclick="FSEdit.syncSumur()" title="Tambahkan catatan untuk sumur ber-pompa (Sumber Air) yang belum ada di sheet Pompa Sumur">🔄 Sinkron dari Sumber Air</button>' : ''}
           <label class="ps switch" title="Bekukan kolom kiri s.d. ${esc(cfg.freezeUntil || '')}"><input type="checkbox" id="${k}-freeze" ${cfg.freezeUntil ? 'checked' : 'disabled'}> 🧊 Freeze kolom</label>
           <label class="ps">Tampilkan <select id="${k}-size">${PAGE_SIZES.map(s => `<option value="${s}">${s}</option>`).join('')}</select> baris</label>
         </div>

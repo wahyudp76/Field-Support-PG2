@@ -333,3 +333,6 @@ tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: bac
 .sr-wil li .bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .sr-wil li .bar span{display:block;height:100%;background:var(--brand,#db8528);border-radius:3px}
 .sr-wil li > span:last-child{min-width:64px;text-align:right;color:var(--muted)}
+
+.ss-tbl{width:100%;border-collapse:collapse;font-size:12px}.ss-tbl th,.ss-tbl td{padding:5px 8px;border-bottom:1px solid var(--border);text-align:left}.ss-tbl th{font-size:11px;color:var(--muted);text-transform:uppercase}
+.tbl-tools #sumur-sync{padding:6px 12px}

@@ -38,7 +38,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 8, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 9, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | pump) atau ?action=ping' });
 }
@@ -57,6 +57,7 @@ function doPost(e) {
   if (body.action === 'withdraw') return withdraw_(body);
   if (body.action === 'install') return install_(body);
   if (body.action === 'pump') return pump_(body);
+  if (body.action === 'syncPompaSumur') return syncPompaSumur_(body);
   return out_({ ok: false, error: 'Aksi tidak dikenal: ' + body.action });
 }
 
@@ -325,6 +326,58 @@ function pump_(b) {
     var sumurRes = null;
     if (b.sumur && b.sumur.fromLokasi && b.sumur.toLokasi) sumurRes = movePompaSumur_(ss, String(b.sumur.fromLokasi), String(b.sumur.toLokasi), String(b.sumur.toKode || ''), b.user || '');
     return out_({ ok: true, results: results, sumur: sumurRes });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message || err) });
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- tambah baris di sheet "Pompa Sumur" untuk sumur ber-pompa (Sumber Air) yang belum punya catatan ----------
+ * body.items = [{lokasi:'108D', kode:'SW08002', kondisi:'Baik', status:'Siap Operasi'}, ...]
+ * Baris baru disisipkan di bawah baris terakhir; format & rumus (bila ada) meniru baris terakhir; kolom yang diisi:
+ *   LOKASI, Kondisi Akhir Sumur (dari Kondisi Sumur Sumber Air), Keterangan = "SIAP PAKAI" bila status Siap Operasi/Standby.
+ */
+function syncPompaSumur_(b) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID), sh = ss.getSheetByName(SHEET_POMPA_SUMUR);
+    if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_POMPA_SUMUR + '" tidak ditemukan' });
+    var items = Array.isArray(b.items) ? b.items : [];
+    if (!items.length) return out_({ ok: false, error: 'Tidak ada sumur yang perlu ditambahkan' });
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var up = headers.map(function (h) { return h.toUpperCase(); });
+    var cLok = up.indexOf('LOKASI') + 1, cNo = up.indexOf('NO') + 1, cKond = up.indexOf('KONDISI AKHIR SUMUR') + 1, cKet = up.indexOf('KETERANGAN') + 1;
+    if (!cLok) return out_({ ok: false, error: 'Kolom LOKASI tidak ada di sheet ' + SHEET_POMPA_SUMUR });
+    var norm = function (v) { return String(v || '').toUpperCase().replace(/\s+/g, ''); };
+    var existing = {}, maxNo = 0, lastData = 1;
+    if (lastRow >= 2) {
+      var data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+      data.forEach(function (r, i) { var l = norm(r[cLok - 1]); if (l) { existing[l] = i + 2; lastData = i + 2; } if (cNo) { var n = Number(r[cNo - 1]); if (isFinite(n) && n > maxNo) maxNo = n; } });
+    }
+    var lower = lastData >= 2 && /[a-z]/.test(String(sh.getRange(lastData, cLok).getValue())) && !/[A-Z]/.test(String(sh.getRange(lastData, cLok).getValue()));
+    var noPat = cNo && lastData >= 2 ? sh.getRange(lastData, cNo).getFormulaR1C1() : '';
+    var added = [], skipped = [];
+    items.forEach(function (it) {
+      var lok = norm(it.lokasi); if (!lok) return;
+      if (existing[lok]) { skipped.push({ lokasi: lok, reason: 'sudah ada (baris ' + existing[lok] + ')' }); return; }
+      var row = lastData + 1;
+      if (row > sh.getMaxRows()) sh.insertRowAfter(sh.getMaxRows()); else if (lastData >= 2) sh.insertRowAfter(lastData);
+      if (lastData >= 2) sh.getRange(lastData, 1, 1, lastCol).copyTo(sh.getRange(row, 1, 1, lastCol), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+      // tiru rumus kolom (bila ada) dari baris terakhir
+      if (lastData >= 2) for (var c = 1; c <= lastCol; c++) { var f = sh.getRange(lastData, c).getFormulaR1C1(); if (f) sh.getRange(row, c).setFormulaR1C1(f); }
+      sh.getRange(row, cLok).setValue(lower ? lok.toLowerCase() : lok);
+      if (cNo) { if (noPat) sh.getRange(row, cNo).setFormulaR1C1(noPat); else sh.getRange(row, cNo).setValue(++maxNo); }
+      if (cKond && it.kondisi) sh.getRange(row, cKond).setValue(String(it.kondisi).trim());
+      if (cKet) sh.getRange(row, cKet).setValue(/siap/i.test(String(it.status || '')) ? 'SIAP PAKAI' : '');
+      existing[lok] = row; lastData = row;
+      added.push({ lokasi: lok, kode: it.kode || '', row: row });
+    });
+    SpreadsheetApp.flush();
+    var lg = ss.getSheetByName(SHEET_LOG_POMPA);
+    if (!lg) { lg = ss.insertSheet(SHEET_LOG_POMPA); lg.appendRow(['Waktu', 'Pengguna', 'Aksi', 'Kode Sumur', 'Lokasi', 'Baris', 'Pompa Lama', 'Pompa Baru', 'Keterangan']); lg.setFrozenRows(1); }
+    added.forEach(function (a) { lg.appendRow([new Date(), b.user || '', 'TAMBAH CATATAN POMPA SUMUR', a.kode, a.lokasi, a.row, '', 'Ada Pompa', 'Baris baru di sheet ' + SHEET_POMPA_SUMUR + ' (sinkron dari Sumber Air)']); });
+    return out_({ ok: true, added: added, skipped: skipped });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }
