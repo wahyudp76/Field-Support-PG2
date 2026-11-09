@@ -1184,7 +1184,8 @@
     $('issuesBody').innerHTML = list.length ? list.slice(0, 500).map(x => `<tr class="clickable" data-key="${x.key}" data-row="${x.row}"><td>${chip(x.level)}</td><td>${esc(x.sheet)}</td><td><b>${x.row}</b></td><td>${esc(x.id)}</td><td>${esc(x.col)}</td><td class="v">${esc(x.value)}</td><td>${esc(x.reason)}</td><td class="s">${esc(x.suggest)}</td></tr>`).join('') + (list.length > 500 ? `<tr><td colspan="8" class="empty">… ${list.length - 500} lainnya (export CSV untuk lengkap)</td></tr>` : '')
       : '<tr><td colspan="8" class="empty">✅ Tidak ada temuan untuk filter ini</td></tr>';
   }
-  window.openIssues = () => { if (!ISSUES.some(x => x.level !== 'info')) $('iss-info').checked = true; $('issuesModal').classList.add('show'); renderIssues(); };
+  window.openIssues = () => { if (!ISSUES.some(x => x.level !== 'info')) $('iss-info').checked = true; $('issuesModal').classList.add('show'); renderIssues(); const n = ISSUES.filter(x => x.fix && x.fix.kind).length, b = $('iss-repair'); if (b) { b.textContent = '🛠 Repair all format' + (n ? ' (' + n + ')' : ''); b.disabled = !n; b.title = n ? n + ' sel salah format tanggal/angka/rumus bisa diperbaiki otomatis' : 'Tidak ada temuan format yang bisa diperbaiki otomatis'; } };
+  window.repairIssues = () => { if (window.FSEdit && FSEdit.repairAll) FSEdit.repairAll(ISSUES); };
   window.closeIssues = () => $('issuesModal').classList.remove('show');
   window.exportIssues = () => {
     const h = ['Level', 'Sheet', 'Baris', 'Kode', 'Kolom', 'Nilai Terinput', 'Masalah', 'Saran'];

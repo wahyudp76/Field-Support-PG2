@@ -38,6 +38,26 @@
   }
 
   /* ---------- Normalisasi tanggal "5/29/2026" | "23/07/2024" → "2026-05-29" ---------- */
+  const MONTHS = { jan: 1, feb: 2, peb: 2, mar: 3, apr: 4, mei: 5, may: 5, jun: 6, jul: 7, agu: 8, ags: 8, aug: 8, sep: 9, sept: 9, okt: 10, oct: 10, nov: 11, des: 12, dec: 12 };
+  const ERR_RE = /^#(REF|N\/A|VALUE|DIV\/0|NAME\?|NUM|NULL|ERROR)!?/i;
+  const pad2 = n => String(n).padStart(2, '0');
+  const validYMD = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= 31 ? y + '-' + pad2(m) + '-' + pad2(d) : null;
+  /* Tafsir longgar untuk tanggal yang tidak baku (dipakai parser & Repair all): 29-Mei-2026, 29 Mei 2026, 2026/05/29, 29.05.2026, 29-05-26, 20260529, serial Excel */
+  function looseDate(s, order) {
+    s = String(s || '').trim(); if (!s) return null;
+    let m = s.match(/^(\d{1,2})[\s\-\/.]+([A-Za-z]{3,9})[\s\-\/.,]+(\d{2,4})$/);
+    if (m && MONTHS[m[2].slice(0, 3).toLowerCase()] !== undefined) { const mo = MONTHS[m[2].slice(0, 4).toLowerCase()] ?? MONTHS[m[2].slice(0, 3).toLowerCase()]; let y = +m[3]; if (y < 100) y += 2000; return validYMD(y, mo, +m[1]); }
+    m = s.match(/^([A-Za-z]{3,9})[\s\-\/.]+(\d{1,2}),?[\s\-\/.]+(\d{4})$/);
+    if (m && MONTHS[m[1].slice(0, 3).toLowerCase()] !== undefined) return validYMD(+m[3], MONTHS[m[1].slice(0, 3).toLowerCase()], +m[2]);
+    m = s.match(/^(\d{4})[\-\/.](\d{1,2})[\-\/.](\d{1,2})(?:[ T].*)?$/);
+    if (m) return validYMD(+m[1], +m[2], +m[3]);
+    m = s.match(/^(\d{1,2})[\-\/.](\d{1,2})[\-\/.](\d{2,4})$/);
+    if (m) { let a = +m[1], b = +m[2], y = +m[3]; if (y < 100) y += 2000; let dd, mm; if (order === 'mdy' && a <= 12) { mm = a; dd = b; } else if (a > 12 || order === 'dmy') { dd = a; mm = b; } else if (b > 12) { mm = a; dd = b; } else { dd = a; mm = b; } return validYMD(y, mm, dd); }
+    m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m) return validYMD(+m[1], +m[2], +m[3]);
+    if (/^\d{5}$/.test(s)) { const n = +s; if (n > 20000 && n < 80000) { const d = new Date(Date.UTC(1899, 11, 30) + n * 864e5); return d.toISOString().slice(0, 10); } }
+    return null;
+  }
   function toISODate(v, order) {
     const s = String(v || '').trim();
     let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -50,7 +70,8 @@
       return y + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
     }
     m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? m[0] : s;
+    if (m) return m[0];
+    return looseDate(s, order) || s; // tampilan d-Mmm-yyyy (29-Mei-2026) dan variasi lain tetap dikenali
   }
   // Tentukan urutan tanggal satu kolom: jika ada nilai dengan angka pertama > 12 → dd/mm, jika angka kedua > 12 → mm/dd
   function detectDateOrder(values) {
@@ -188,14 +209,23 @@
         let v = r[j] == null ? '' : String(r[j]).trim();
         if (dateOrder[h] && v) {
           const iso = toISODate(v, dateOrder[h]);
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) issues.push({ row: sheetRow[i], col: h, value: v, level: 'warn', reason: 'Tanggal tidak dikenali (format kolom ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') + ')', suggest: 'Tulis ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') });
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+            if (ERR_RE.test(v)) issues.push({ row: sheetRow[i], col: h, value: v, level: 'error', reason: 'Rumus error (' + v + ') di kolom tanggal', suggest: 'Repair all: salin ulang rumus dari baris sebelah', fix: { kind: 'formula' } });
+            else issues.push({ row: sheetRow[i], col: h, value: v, level: 'warn', reason: 'Tanggal tidak dikenali (format kolom ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') + ')', suggest: 'Tulis ' + (dateOrder[h] === 'dmy' ? 'dd/mm/yyyy' : 'mm/dd/yyyy') });
+          }
           v = iso;
         }
         o[h] = v;
+        if (v && !numFmt[h] && !dateOrder[h] && ERR_RE.test(v)) issues.push({ row: sheetRow[i], col: h, value: v, level: 'error', reason: 'Rumus error (' + v + ')', suggest: 'Repair all: salin ulang rumus dari baris sebelah', fix: { kind: 'formula' } });
         if (numFmt[h] && v) {
           const chk = checkNum(v, numFmt[h]);
           o._num[h] = parseNum(v, numFmt[h]);
-          if (chk) { issues.push({ row: sheetRow[i], col: h, value: v, ...chk }); (o._flag || (o._flag = {}))[h] = chk; }
+          if (chk) {
+            const n = o._num[h];
+            if (ERR_RE.test(v)) { chk.level = 'error'; chk.reason = 'Rumus error (' + v + ')'; chk.suggest = 'Repair all: salin ulang rumus dari baris sebelah'; chk.fix = { kind: 'formula' }; }
+            else if (chk.level === 'warn' && isFinite(n)) chk.fix = { kind: 'num', value: n }; // pemisah ribuan/desimal keliru → tulis ulang sebagai angka
+            issues.push({ row: sheetRow[i], col: h, value: v, ...chk }); (o._flag || (o._flag = {}))[h] = chk;
+          }
         }
       });
       return o;

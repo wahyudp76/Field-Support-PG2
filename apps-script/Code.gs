@@ -38,7 +38,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 10, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 11, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | pump) atau ?action=ping' });
 }
@@ -58,6 +58,7 @@ function doPost(e) {
   if (body.action === 'install') return install_(body);
   if (body.action === 'pump') return pump_(body);
   if (body.action === 'syncPompaSumur') return syncPompaSumur_(body);
+  if (body.action === 'repairCells') return repairCells_(body);
   return out_({ ok: false, error: 'Aksi tidak dikenal: ' + body.action });
 }
 
@@ -508,4 +509,66 @@ function log_(ss, rowVals) {
 
 function out_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* REPAIR ALL — perbaiki sel yang salah format (dipanggil dari tombol "Repair all" di dashboard)
+ * items: [{sheet, row, col (nama header), kind: 'date'|'num'|'formula', value}]
+ *  date    → tulis sebagai tanggal asli (value 'yyyy-mm-dd'); format tampilan kolom tidak diubah
+ *  num     → tulis sebagai angka (value number) sehingga pemisah ribuan/desimal mengikuti locale spreadsheet
+ *  formula → sel error (#REF!/#N/A/...): salin ulang rumus R1C1 dari baris terdekat di kolom yang sama yang rumusnya sehat;
+ *            bila tidak ada rumus sehat di kolom itu, dilewati (tidak menebak)
+ * Nilai lama dicatat di sheet "Log Perbaikan Format" agar bisa ditelusuri/dikembalikan. */
+function repairCells_(b) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
+    var items = Array.isArray(b.items) ? b.items.slice(0, 400) : [];
+    if (!items.length) return out_({ ok: false, error: 'Tidak ada sel yang dipilih' });
+    var fixed = [], skipped = [], cache = {};
+    var lg = ss.getSheetByName(SHEET_LOG_REPAIR);
+    if (!lg) { lg = ss.insertSheet(SHEET_LOG_REPAIR); lg.appendRow(['Waktu', 'Pengguna', 'Sheet', 'Baris', 'Kolom', 'Jenis', 'Nilai Lama', 'Rumus Lama', 'Nilai/Rumus Baru']); lg.setFrozenRows(1); }
+    var isErr = function (v) { return /^#(REF|N\/A|VALUE|DIV\/0|NAME\?|NUM|NULL|ERROR)!?/i.test(String(v || '')); };
+    items.forEach(function (it) {
+      try {
+        var name = String(it.sheet || '').split(' › ')[0].trim();
+        var c = cache[name];
+        if (!c) {
+          var sh = ss.getSheetByName(name); if (!sh) { skipped.push({ sheet: name, row: it.row, col: it.col, reason: 'sheet tidak ditemukan' }); return; }
+          var lastCol = sh.getLastColumn(), headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim().toLowerCase(); });
+          c = cache[name] = { sh: sh, headers: headers, lastRow: sh.getLastRow() };
+        }
+        var col = c.headers.indexOf(String(it.col || '').trim().toLowerCase()) + 1, row = Number(it.row);
+        if (!col || !row || row < 2 || row > c.lastRow) { skipped.push({ sheet: name, row: it.row, col: it.col, reason: 'kolom/baris tidak ditemukan' }); return; }
+        var cell = c.sh.getRange(row, col), oldV = cell.getDisplayValue(), oldF = cell.getFormula(), newDesc = '';
+        if (it.kind === 'formula') {
+          if (!isErr(oldV) && !oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel sudah tidak error' }); return; }
+          var pat = '';
+          for (var d = 1; d <= 30 && !pat; d++) {
+            [row - d, row + d].forEach(function (r) {
+              if (pat || r < 2 || r > c.lastRow) return;
+              var rg = c.sh.getRange(r, col); var f = rg.getFormulaR1C1();
+              if (f && !/#REF/i.test(f) && !isErr(rg.getDisplayValue())) pat = f;
+            });
+          }
+          if (!pat) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'tidak ada rumus sehat di kolom ini untuk ditiru' }); return; }
+          cell.setFormulaR1C1(pat); newDesc = c.sh.getRange(row, col).getFormula();
+        } else if (it.kind === 'date') {
+          var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(it.value || '')); if (!m) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'nilai tanggal tidak valid' }); return; }
+          if (oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel berisi rumus, tidak ditimpa' }); return; }
+          cell.setValue(new Date(+m[1], +m[2] - 1, +m[3])); newDesc = it.value;
+        } else if (it.kind === 'num') {
+          var n = Number(it.value); if (!isFinite(n)) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'nilai angka tidak valid' }); return; }
+          if (oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel berisi rumus, tidak ditimpa' }); return; }
+          cell.setValue(n); newDesc = String(n);
+        } else { skipped.push({ sheet: name, row: row, col: it.col, reason: 'jenis perbaikan tidak dikenal' }); return; }
+        fixed.push({ sheet: name, row: row, col: it.col, kind: it.kind, from: oldV, to: newDesc });
+        lg.appendRow([new Date(), b.user || '', name, row, it.col, it.kind, oldV, oldF, newDesc]);
+      } catch (e1) { skipped.push({ sheet: it.sheet, row: it.row, col: it.col, reason: String(e1 && e1.message || e1) }); }
+    });
+    SpreadsheetApp.flush();
+    return out_({ ok: true, fixed: fixed, skipped: skipped });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message || err) });
+  } finally { lock.releaseLock(); }
 }

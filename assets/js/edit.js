@@ -524,5 +524,50 @@
     $('setupForm').onsubmit = e => { e.preventDefault(); const u = $('su-url').value.trim(); if (u && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u) && !confirm('URL tidak tampak seperti Web App Apps Script (…/exec). Simpan juga?')) return; if (u) localStorage.setItem(LS_URL, u); else localStorage.removeItem(LS_URL); toast(u ? 'URL Web App disimpan' : 'URL Web App dihapus'); close(); if (u && after) after(); };
   }
 
-  window.FSEdit = { open, install, pump, syncSumur, setup, suggest, enabled: () => true, apiUrl };
+  /* ---------- REPAIR ALL: perbaiki semua temuan format (tanggal / angka / rumus error) ---------- */
+  function repairAll(issues) {
+    ensureModal();
+    if (!apiUrl()) return setup(() => repairAll(issues));
+    const list = (issues || []).filter(x => x.fix && x.fix.kind);
+    const KIND = { date: '📅 Tanggal', num: '🔢 Angka', formula: '🧮 Rumus error' };
+    const cnt = k => list.filter(x => x.fix.kind === k).length;
+    const preview = x => x.fix.kind === 'formula' ? 'salin rumus dari baris sebelah' : x.fix.kind === 'num' ? Number(x.fix.value).toLocaleString('id-ID', { maximumFractionDigits: 4 }) : x.fix.value;
+    $('editTitle').textContent = '🛠 Repair all — perbaikan format otomatis';
+    $('editBody').innerHTML = `
+      <div class="edit-cur"><b>Ringkasan</b>
+        <div class="edit-grid4"><div><span>Bisa diperbaiki</span>${list.length}</div><div><span>Tanggal</span>${cnt('date')}</div><div><span>Angka</span>${cnt('num')}</div><div><span>Rumus error</span>${cnt('formula')}</div></div>
+        <div class="edit-ket">Hanya temuan yang <b>pasti cara perbaikannya</b> yang diikutkan: tanggal ditulis ulang sebagai tanggal asli, angka dengan pemisah keliru ditulis ulang sebagai angka (ikut format kolom), sel <b>#REF!/#N/A</b> diisi ulang rumus dari baris terdekat yang sehat. Sel berisi rumus tidak ditimpa nilai; nilai lama dicatat di sheet <b>Log Perbaikan Format</b>. Temuan lain (duplikat, relasi, nilai ekstrem, teks) tetap perlu ditinjau manual.</div></div>
+      <form id="raForm" class="edit-form" autocomplete="off">
+        <div class="wide">${list.length ? `<table class="ss-tbl"><thead><tr><th><input type="checkbox" id="ra-all" checked></th><th>Sheet</th><th>Baris</th><th>Kolom</th><th>Nilai sekarang</th><th>Jenis</th><th>Menjadi</th></tr></thead><tbody>${list.map((x, i) => `<tr><td><input type="checkbox" class="ra-chk" data-i="${i}" checked></td><td>${esc(x.sheet)}</td><td><b>${x.row}</b></td><td>${esc(x.col)}</td><td class="v">${esc(x.value)}</td><td>${KIND[x.fix.kind]}</td><td>${esc(preview(x))}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">✓ Tidak ada temuan format yang bisa diperbaiki otomatis.</div>'}</div>
+        <label>PIN <input id="ra-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
+        <label>Nama pengisi <input id="ra-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ra-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ra-cancel">Tutup</button><button type="submit" class="btn btn-primary" id="ra-save" ${list.length ? '' : 'disabled'}>🛠 Perbaiki yang dicentang</button></div>
+        <div class="wide edit-msg" id="ra-msg"></div>
+      </form>`;
+    $('editModal').classList.add('show');
+    $('ra-cancel').onclick = close; $('ra-setup').onclick = () => setup(() => repairAll(issues));
+    if ($('ra-all')) $('ra-all').onchange = () => document.querySelectorAll('.ra-chk').forEach(c => { c.checked = $('ra-all').checked; });
+    $('raForm').onsubmit = async e => {
+      e.preventDefault();
+      const pin = $('ra-pin').value.trim(), msg = $('ra-msg'), btn = $('ra-save');
+      const sel = [...document.querySelectorAll('.ra-chk:checked')].map(c => list[+c.dataset.i]);
+      if (!pin) { msg.textContent = 'PIN wajib diisi.'; msg.className = 'wide edit-msg err'; return; }
+      if (!sel.length) { msg.textContent = 'Pilih minimal satu sel.'; msg.className = 'wide edit-msg err'; return; }
+      if (!confirm(sel.length + ' sel di spreadsheet akan ditulis ulang. Nilai lama dicatat di sheet "Log Perbaikan Format".\n\nLanjutkan?')) return;
+      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Memperbaiki ' + sel.length + ' sel…';
+      try {
+        const j = await post({ action: 'repairCells', pin, user: $('ra-user').value.trim(), items: sel.map(x => ({ sheet: x.sheet, row: x.row, col: x.col, kind: x.fix.kind, value: x.fix.value })) });
+        if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
+        if (!('fixed' in j)) throw new Error('Web App masih versi lama (belum ada aksi repairCells). Salin ulang Code.gs v11 lalu deploy versi baru.');
+        localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('ra-user').value.trim());
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ ' + (j.fixed || []).length + ' sel diperbaiki' + ((j.skipped || []).length ? ' · dilewati ' + j.skipped.length + ': ' + j.skipped.slice(0, 8).map(x => x.sheet + '!' + x.row + ' ' + x.col + ' (' + x.reason + ')').join('; ') + (j.skipped.length > 8 ? ' …' : '') : '') + '. Menyinkronkan ulang…';
+        toast((j.fixed || []).length + ' sel diperbaiki ✔');
+        setTimeout(() => { close(); if (window.closeIssues) closeIssues(); F().loadData && F().loadData(false); }, 2500);
+      } catch (ex) {
+        msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (ex.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : ex.message); btn.disabled = false;
+      }
+    };
+  }
+
+  window.FSEdit = { open, install, pump, syncSumur, repairAll, setup, suggest, enabled: () => true, apiUrl };
 })();
