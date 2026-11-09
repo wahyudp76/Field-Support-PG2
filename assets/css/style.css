@@ -302,7 +302,8 @@ tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: bac
 .sug-warn{background:rgba(17,24,39,.1);border:1px solid rgba(17,24,39,.35);color:#111827;border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:10px;font-weight:600}
 .edit-steps{padding-left:18px;line-height:1.7}.edit-steps code{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}
 .btn-danger{background:#111827;color:#fff}.btn-danger:hover{background:#374151}.btn-danger:disabled{opacity:.5;cursor:not-allowed}
-.edit-form label.chk{flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);font-weight:500}
+.edit-form label.chk{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);font-weight:500;line-height:1.4}
+.edit-form label.chk b{display:inline}
 .edit-form label.chk input{width:16px;height:16px;accent-color:#111827}
 
 /* pasang unit */
@@ -349,3 +350,6 @@ tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: bac
 .chip-red::before{content:"!";margin-right:4px}
 .chip-amber::before{content:"◐";font-size:9px;margin-right:5px;vertical-align:1px}
 .kpi .icon,.tab,.card h3,.brand,.mini-list li{filter:grayscale(1)}
+/* 100% monokrom: semua emoji, ikon, grafik, dan gambar di-grayscale per wadah (bukan di html agar position:fixed tetap benar) */
+header,.tabs,main,.modal-bg,#loader,.toast,#issuesModal,#editModal{filter:grayscale(1)}
+.dot.err{outline-color:#111827}
