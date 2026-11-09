@@ -8,7 +8,11 @@
   'use strict';
   const { toNumber } = DataLayer;
   const PAGE_SIZES = [25, 50, 100, 250, 'Semua'];
-  const PALETTE = ['#f59e0b', '#38bdf8', '#22c55e', '#a78bfa', '#f97316', '#14b8a6', '#ec4899', '#6366f1', '#fbbf24', '#06b6d4', '#e11d48', '#84cc16', '#c2410c', '#8b5cf6'];
+  const PALETTE = ['#111827', '#6b7280', '#374151', '#b0b7c3', '#1f2937', '#9ca3af', '#4b5563', '#d1d5db', '#030712', '#7c8594', '#2b3442', '#c5cad3', '#5b6472', '#e5e7eb']; // monokrom: gelap→terang bergantian agar seri bersebelahan kontras
+  // Peta warna semantik → skala abu-abu (tema monokrom)
+  const MONO = { '#22c55e': '#374151', '#4ade80': '#374151', '#16a34a': '#374151', '#f59e0b': '#9ca3af', '#fbbf24': '#9ca3af', '#f97316': '#6b7280', '#ef4444': '#111827', '#f87171': '#111827', '#dc2626': '#111827', '#38bdf8': '#4b5563', '#0ea5e9': '#4b5563', '#a78bfa': '#6b7280', '#8b5cf6': '#6b7280', '#14b8a6': '#4b5563', '#6366f1': '#374151', '#ec4899': '#9ca3af', '#94a3b8': '#d1d5db', '#64748b': '#9ca3af', '#84cc16': '#6b7280' };
+  const mono = c => (typeof c === 'string' && MONO[c.toLowerCase()]) || c;
+  if (window.Chart) Chart.register({ id: 'monoColors', beforeUpdate(c) { c.data.datasets.forEach((d, di) => { if (Array.isArray(d.backgroundColor)) d.backgroundColor = d.backgroundColor.map((x, i) => mono(x)); else if (typeof d.backgroundColor === 'string') d.backgroundColor = mono(d.backgroundColor); if (typeof d.borderColor === 'string') d.borderColor = mono(d.borderColor); }); } });
 
   /* ---------- helper ---------- */
   const $ = id => document.getElementById(id);
@@ -210,7 +214,7 @@
   /* ---------- theme ---------- */
   function applyTheme(t) { document.body.setAttribute('data-theme', t); $('themeBtn').innerHTML = (t === 'light' ? '☀️' : '🌙') + ' <span class="t">Tema</span>'; localStorage.setItem('fs_theme', t); }
   window.toggleTheme = () => { applyTheme(document.body.getAttribute('data-theme') === 'light' ? 'dark' : 'light'); rerenderAll(); };
-  applyTheme(localStorage.getItem('fs_theme') || 'light'); // default: tema terang
+  applyTheme('light'); // tema monokrom tunggal (tanpa mode gelap)
 
   /* ---------- load ---------- */
   const CACHE_KEY = 'fs_pg2_data_v1';
@@ -548,7 +552,7 @@
   window.closeModal = () => $('modal').classList.remove('show');
 
   /* ---------- charts ---------- */
-  function themeColors() { const l = document.body.getAttribute('data-theme') === 'light'; return { text: l ? '#6b5440' : '#b09a85', grid: l ? '#f0dfc9' : '#3d2e21', border: l ? '#ffffff' : '#2a1f16' }; }
+  function themeColors() { return { text: '#4b5563', grid: '#e5e7eb', border: '#ffffff' }; }
   const centerText = {
     id: 'centerText',
     afterDraw(chart) {
@@ -609,10 +613,10 @@
     const dataset = isPie ? {
       data, backgroundColor: colors, borderColor: tc.border, borderWidth: 3, borderRadius: 14, spacing: 3, hoverOffset: 10, hoverBorderWidth: 0
     } : isLine ? {
-      data, fill: true, tension: .4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2.5, borderColor: '#38bdf8', pointBackgroundColor: '#38bdf8',
-      backgroundColor: c => { const { ctx: g, chartArea } = c.chart; if (!chartArea) return 'rgba(56,189,248,.15)'; const gr = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); gr.addColorStop(0, 'rgba(56,189,248,.35)'); gr.addColorStop(1, 'rgba(56,189,248,0)'); return gr; }
+      data, fill: true, tension: .4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2.5, borderColor: '#1f2937', pointBackgroundColor: '#1f2937',
+      backgroundColor: c => { const { ctx: g, chartArea } = c.chart; if (!chartArea) return 'rgba(31,41,55,.12)'; const gr = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); gr.addColorStop(0, 'rgba(31,41,55,.30)'); gr.addColorStop(1, 'rgba(31,41,55,0)'); return gr; }
     } : {
-      data, backgroundColor: type === 'hbar' ? 'rgba(239,68,68,.85)' : 'rgba(245,158,11,.9)', hoverBackgroundColor: type === 'hbar' ? '#ef4444' : '#f59e0b',
+      data, backgroundColor: type === 'hbar' ? '#111827' : '#374151', hoverBackgroundColor: type === 'hbar' ? '#374151' : '#111827',
       borderRadius: 8, borderSkipped: false, maxBarThickness: 42
     };
 
