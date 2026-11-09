@@ -8,9 +8,9 @@
   'use strict';
   const { toNumber } = DataLayer;
   const PAGE_SIZES = [25, 50, 100, 250, 'Semua'];
-  const PALETTE = ['#111827', '#6b7280', '#374151', '#b0b7c3', '#1f2937', '#9ca3af', '#4b5563', '#d1d5db', '#030712', '#7c8594', '#2b3442', '#c5cad3', '#5b6472', '#e5e7eb']; // monokrom: gelap→terang bergantian agar seri bersebelahan kontras
-  // Peta warna semantik → skala abu-abu (tema monokrom)
-  const MONO = { '#22c55e': '#374151', '#4ade80': '#374151', '#16a34a': '#374151', '#f59e0b': '#9ca3af', '#fbbf24': '#9ca3af', '#f97316': '#6b7280', '#ef4444': '#111827', '#f87171': '#111827', '#dc2626': '#111827', '#38bdf8': '#4b5563', '#0ea5e9': '#4b5563', '#a78bfa': '#6b7280', '#8b5cf6': '#6b7280', '#14b8a6': '#4b5563', '#6366f1': '#374151', '#ec4899': '#9ca3af', '#94a3b8': '#d1d5db', '#64748b': '#9ca3af', '#84cc16': '#6b7280' };
+  const PALETTE = ['#64748b', '#6b94c2', '#5f9f78', '#b8893a', '#b25454', '#7a6a99', '#5b9aa0', '#94a3b8', '#8fb0d0', '#9cc3a8', '#d4b06a', '#c98585', '#a797c2', '#475569']; // abu dominan + warna lembut
+  // Peta warna cerah lama → versi lembut (tema abu-abu santai)
+  const MONO = { '#22c55e': '#5f9f78', '#4ade80': '#5f9f78', '#16a34a': '#4c8a66', '#f59e0b': '#b8893a', '#fbbf24': '#d4b06a', '#f97316': '#c4844f', '#ef4444': '#b25454', '#f87171': '#c98585', '#dc2626': '#9b3b3b', '#38bdf8': '#6b94c2', '#0ea5e9': '#5b8bb8', '#a78bfa': '#7a6a99', '#8b5cf6': '#7a6a99', '#14b8a6': '#5b9aa0', '#6366f1': '#6b7fb8', '#ec4899': '#c27a9c', '#94a3b8': '#94a3b8', '#64748b': '#64748b', '#84cc16': '#8aa65a', '#111827': '#475569', '#374151': '#64748b' };
   const mono = c => (typeof c === 'string' && MONO[c.toLowerCase()]) || c;
   if (window.Chart) Chart.register({ id: 'monoColors', beforeUpdate(c) { c.data.datasets.forEach((d, di) => { if (Array.isArray(d.backgroundColor)) d.backgroundColor = d.backgroundColor.map((x, i) => mono(x)); else if (typeof d.backgroundColor === 'string') d.backgroundColor = mono(d.backgroundColor); if (typeof d.borderColor === 'string') d.borderColor = mono(d.borderColor); }); } });
 
@@ -441,7 +441,7 @@
     if (CONFIG[k].custom === 'pendukung') return renderPend();
     const cfg = CONFIG[k], rows = filtered(k), s = state[k], headers = RAW[k].headers;
 
-    $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div>${x.sub && x.sub(rows) ? `<div class="sub">${esc(x.sub(rows))}</div>` : ''}</div>`).join('');
+    $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${mono(x.c)}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div>${x.sub && x.sub(rows) ? `<div class="sub">${esc(x.sub(rows))}</div>` : ''}</div>`).join('');
 
     if (k === 'sumur') renderSumurResume(rows);
     // chip filter aktif
@@ -613,10 +613,10 @@
     const dataset = isPie ? {
       data, backgroundColor: colors, borderColor: tc.border, borderWidth: 3, borderRadius: 14, spacing: 3, hoverOffset: 10, hoverBorderWidth: 0
     } : isLine ? {
-      data, fill: true, tension: .4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2.5, borderColor: '#1f2937', pointBackgroundColor: '#1f2937',
-      backgroundColor: c => { const { ctx: g, chartArea } = c.chart; if (!chartArea) return 'rgba(31,41,55,.12)'; const gr = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); gr.addColorStop(0, 'rgba(31,41,55,.30)'); gr.addColorStop(1, 'rgba(31,41,55,0)'); return gr; }
+      data, fill: true, tension: .4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2.5, borderColor: '#4f6f8f', pointBackgroundColor: '#4f6f8f',
+      backgroundColor: c => { const { ctx: g, chartArea } = c.chart; if (!chartArea) return 'rgba(107,148,194,.15)'; const gr = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); gr.addColorStop(0, 'rgba(107,148,194,.35)'); gr.addColorStop(1, 'rgba(107,148,194,0)'); return gr; }
     } : {
-      data, backgroundColor: type === 'hbar' ? '#111827' : '#374151', hoverBackgroundColor: type === 'hbar' ? '#374151' : '#111827',
+      data, backgroundColor: type === 'hbar' ? '#b25454' : '#6b94c2', hoverBackgroundColor: type === 'hbar' ? '#9b3b3b' : '#4f6f8f',
       borderRadius: 8, borderSkipped: false, maxBarThickness: 42
     };
 
@@ -665,7 +665,7 @@
       { l: 'Total Pipa (batang)', v: fmt(pipaModel().grand), i: '🔩', c: '#f97316', t: 'pipa' },
       { l: 'Unit Pendukung', v: fmt((RAW.pendukung && !RAW.pendukung.error ? RAW.pendukung.rows : []).length), i: '🚜', c: '#84cc16', t: 'pendukung' },
     ];
-    $('ov-kpis').innerHTML = k.map(x => `<div class="kpi link" style="--c:${x.c}" data-t="${x.t}" title="Buka tab"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${x.l}</div></div>`).join('');
+    $('ov-kpis').innerHTML = k.map(x => `<div class="kpi link" style="--c:${mono(x.c)}" data-t="${x.t}" title="Buka tab"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${x.l}</div></div>`).join('');
     requestAnimationFrame(() => {
       const nz = a => a.filter(x => x[0] !== '(kosong)');
       drawChart('ov-c1', 'bar', nz(count(d, altKey(RAW.detail?.headers || [], 'Wil') || 'Wil')).sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'id', { numeric: true })));
@@ -830,7 +830,7 @@
       { l: 'Buruk + Afkir (Poor/Reject)', v: fmt(bad), s: pipaPct(bad, V.graded), i: '🔴', c: '#ef4444' },
       { l: 'Penempatan', v: fmt(V.places.length), i: '📍', c: '#38bdf8' },
     ];
-    $('pipa-kpis').innerHTML = kp.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${esc(x.l)}${x.s ? `<span class="kpi-sub">${esc(x.s)}</span>` : ''}</div></div>`).join('');
+    $('pipa-kpis').innerHTML = kp.map(x => `<div class="kpi" style="--c:${mono(x.c)}"><div class="icon">${x.i}</div><div class="val">${x.v}</div><div class="lbl">${esc(x.l)}${x.s ? `<span class="kpi-sub">${esc(x.s)}</span>` : ''}</div></div>`).join('');
     const chipRow = (label, key, items) => `<div class="fgroup"><label>${label}</label><div class="pchips">${[['', 'Semua']].concat(items.map(x => [x, x])).map(([v, t]) => `<button type="button" class="pchip ${(v === '' ? !pipaState[key].size : pipaState[key].has(v)) ? 'on' : ''}" data-pf="${key}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div></div>`;
     $('pipa-filters').innerHTML = chipRow('📍 Penempatan', 'place', M.places.map(p => p.name)) + chipRow('🔩 Jenis Pipa', 'jenis', M.jenis.map(j => j.name));
     $('pipa-af').innerHTML = (pipaState.place.size || pipaState.jenis.size) ? `<span class="chip chip-blue">Filter aktif: ${[...pipaState.place, ...pipaState.jenis].map(esc).join(', ')}</span> <button class="btn btn-outline btn-sm" data-pf="all" data-v="">✕ Reset</button>` : '';
@@ -968,7 +968,7 @@
       { l: 'Rata-rata Volume (L)', v: fmt(volAvg), i: '📐', c: '#6366f1' },
       { l: 'Kode Belum Final (…0000)', v: fmt(V.p.filter(r => /0{4}$/.test(r[M.pKode] || '')).length), i: '🏷️', c: '#ef4444' },
     ];
-    $('pendukung-kpis').innerHTML = kp.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.i}</div><div class="val${x.small ? ' small' : ''}">${x.v}</div><div class="lbl">${esc(x.l)}${x.s ? `<span class="kpi-sub">${esc(x.s)}</span>` : ''}</div></div>`).join('');
+    $('pendukung-kpis').innerHTML = kp.map(x => `<div class="kpi" style="--c:${mono(x.c)}"><div class="icon">${x.i}</div><div class="val${x.small ? ' small' : ''}">${x.v}</div><div class="lbl">${esc(x.l)}${x.s ? `<span class="kpi-sub">${esc(x.s)}</span>` : ''}</div></div>`).join('');
     const chipRow = (label, key, items) => `<div class="fgroup"><label>${label}</label><div class="pchips">${[['', 'Semua']].concat(items.map(x => [x, x])).map(([v, t]) => `<button type="button" class="pchip ${(v === '' ? !pendState[key].size : pendState[key].has(v)) ? 'on' : ''}" data-pf="${key}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div></div>`;
     $('pend-filters').innerHTML = chipRow('📍 Wilayah', 'wil', M.wil) + chipRow('🧩 Jenis Unit', 'jenis', M.jenis) + (M.okA ? chipRow('🛢️ Aktivitas Tangki', 'akt', M.akt) : '');
     const act = [...pendState.wil, ...pendState.jenis, ...pendState.akt];
