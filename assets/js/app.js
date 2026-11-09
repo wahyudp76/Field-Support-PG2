@@ -91,6 +91,8 @@
     sumber: {
       title: 'Inventaris Sumber Air', icon: '🌊',
       freezeUntil: 'Wilayah',
+      // filter bawaan: hanya wilayah PG2 (W08–W15); nilai yang tidak ada di data diabaikan
+      defaultFilters: { PG: ['PG2'], Wilayah: ['W08', 'W09', 'W10', 'W11', 'W12', 'W13', 'W14', 'W15'] },
       filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Pompa', 'Status', 'Tahun'],
       kpis: [
         { label: 'Total Sumber Air', icon: '🌊', c: '#38bdf8', fn: r => r.length },
@@ -209,7 +211,12 @@
   /* ---------- state ---------- */
   const RAW = {}, state = {}, charts = {}, dirty = {};
   let currentTab = 'overview', timer = null, loading = false;
-  const newState = () => ({ filters: {}, search: '', sort: null, dir: 1, page: 1, size: Number(localStorage.getItem('fs_pagesize')) || 25 });
+  const newState = (k) => {
+    const st = { filters: {}, search: '', sort: null, dir: 1, page: 1, size: Number(localStorage.getItem('fs_pagesize')) || 25 };
+    const df = k && CONFIG[k] && CONFIG[k].defaultFilters;
+    if (df && RAW[k] && !RAW[k].error) Object.entries(df).forEach(([f, vals]) => { if (!RAW[k].headers.includes(f)) return; const have = new Set(RAW[k].rows.map(r => r[f])); const set = new Set(vals.filter(v => have.has(v))); if (set.size) st.filters[f] = set; });
+    return st;
+  };
 
   /* ---------- theme ---------- */
   function applyTheme(t) { document.body.setAttribute('data-theme', t); $('themeBtn').innerHTML = (t === 'light' ? '☀️' : '🌙') + ' <span class="t">Tema</span>'; localStorage.setItem('fs_theme', t); }
@@ -273,7 +280,7 @@
       if (k === 'sumur') s.rows.forEach(r => { r._s = s.headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); });
       s.stale = false; RAW[k] = s;
       if (s.error) errs.push(s.name + ': ' + s.error);
-      if (!state[k]) state[k] = newState();
+      if (!state[k]) state[k] = newState(k);
       $('badge-' + k).textContent = fmt(k === 'sumur' ? s.rows.filter(r => r['Status Catatan'] === 'Aktif').length : s.rows.length);
       if (k === 'sumur') $('badge-' + k).title = fmt(s.rows.length) + ' catatan di sheet Pompa Sumur · angka = pompa aktif (Ada Pompa di Sumber Air)';
       buildView(k);
@@ -430,7 +437,7 @@
     return rows;
   }
   function isNumericCol(k, c) { return !!(RAW[k].meta && RAW[k].meta.numFmt && RAW[k].meta.numFmt[c]); }
-  function resetFilters(k) { const size = state[k].size; state[k] = newState(); state[k].size = size; $(k + '-search').value = ''; syncMsButtons(k); renderView(k); }
+  function resetFilters(k) { const size = state[k].size; state[k] = newState(k); state[k].size = size; $(k + '-search').value = ''; syncMsButtons(k); renderView(k); }
   function sortBy(k, c) { const s = state[k]; if (s.sort === c) s.dir *= -1; else { s.sort = c; s.dir = 1; } renderView(k); }
 
   /* ---------- render tab ---------- */
@@ -450,6 +457,7 @@
       ? [...set].forEach(v => af.push(`<span class="chip chip-blue" data-f="${esc(f)}" data-v="${esc(v)}" title="Hapus">${esc(f)}: <b>${esc(v)}</b> ✕</span>`))
       : af.push(`<span class="chip chip-blue" data-f="${esc(f)}" title="Hapus semua">${esc(f)}: <b>${set.size} nilai</b> ✕</span>`)));
     if (s.search) af.push(`<span class="chip chip-purple">🔍 "${esc(s.search)}"</span>`);
+    if (CONFIG[k].defaultFilters && af.length) af.push(`<span class="chip chip-gray" title="Filter bawaan tab ini: ${esc(Object.entries(CONFIG[k].defaultFilters).map(([f, v]) => f + ' = ' + v.join('/')).join(' · '))}. Klik ✕ pada chip untuk melihat semua PG; tombol Reset mengembalikan ke bawaan">ⓘ bawaan: PG2 · W08–W15</span>`);
     $(k + '-af').innerHTML = af.join('');
 
     requestAnimationFrame(() => cfg.charts.forEach(c => {
