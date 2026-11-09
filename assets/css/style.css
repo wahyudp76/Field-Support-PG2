@@ -315,3 +315,21 @@ tr.row-hl > td { background: rgba(245, 158, 11, .28) !important; transition: bac
 .modal .edit-body .edit-tabs{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
 .edit-form .pp-move,.edit-form .pp-set{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 14px}
 .tbl-tools #sumber-pump{padding:6px 12px}
+
+/* sumur bor */
+.sumur-resume{margin-bottom:16px}
+.sumur-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;align-items:start}
+.sr-block{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px}
+.sr-block .big{font-size:28px;font-weight:800;line-height:1}
+.sr-block .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 6px}
+.sr-block .sub{font-size:12px;color:var(--muted);line-height:1.5}
+.sr-block .chip.clickable{cursor:pointer}
+.sr-wil{margin-top:12px;columns:2;column-gap:24px}
+@media(max-width:720px){.sr-wil{columns:1}}
+.edit-cur .sumur-desc{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--panel);border:1px dashed var(--border);font-size:12px;line-height:1.5}
+.sr-wil{list-style:none;padding:0}
+.sr-wil li{display:flex;align-items:center;gap:10px;font-size:12px;padding:3px 0;background:none;border:0;break-inside:avoid}
+.sr-wil li b{min-width:40px}
+.sr-wil li .bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.sr-wil li .bar span{display:block;height:100%;background:var(--brand,#db8528);border-radius:3px}
+.sr-wil li > span:last-child{min-width:64px;text-align:right;color:var(--muted)}

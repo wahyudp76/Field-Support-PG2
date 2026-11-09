@@ -381,7 +381,9 @@
           <label>Sumur <select id="pp-one"><option value="">— pilih sumur —</option>${opt(wells, sel ? sel['Kode Baru'] : '')}</select><small class="edit-hint" id="pp-one-i"></small></label>
           <label>Kondisi pompa baru <select id="pp-one-val">${POMPA.map(v => `<option ${sel && v === sel['Pompa'] ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         </div>
-        <label class="wide">Keterangan (opsional) <input id="pp-ket" placeholder="mis. pompa dipindah karena sumur asal non irigasi"></label>
+        <div class="wide edit-cur" id="pp-sumur" style="display:none"><b>🛢️ Deskripsi pompa (tab Sumur Bor)</b><div class="sumur-desc" id="pp-sumur-d"></div><div style="margin-top:6px"><button type="button" class="btn btn-outline" id="pp-sumur-go">Buka di tab Sumur Bor</button></div></div>
+        <label class="wide chk pp-move"><input type="checkbox" id="pp-sumur-mv" checked> Pindahkan juga catatan pompa di sheet <b>Pompa Sumur</b> ke lokasi sumur tujuan (kolom LOKASI diubah, riwayat ditambahkan di Keterangan)</label>
+        <label class="wide">Keterangan <small class="edit-cnt" title="Diisi otomatis dari deskripsi Sumur Bor; bisa diubah">auto</small><input id="pp-ket" placeholder="mis. pompa dipindah karena sumur asal non irigasi"></label>
         <label>PIN <input id="pp-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
         <label>Nama pengisi <input id="pp-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
         <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="pp-setup">⚙ Atur URL Web App</button><span class="grow"></span><button type="button" class="btn btn-outline" id="pp-cancel">Batal</button><button type="submit" class="btn btn-primary" id="pp-save">💾 Simpan ke Sheet</button></div>
@@ -390,13 +392,27 @@
     $('editModal').classList.add('show');
     $('pp-cancel').onclick = close; $('pp-setup').onclick = () => setup(() => pump(kode));
     let mode = defTo && !defFrom ? 'set' : 'move';
-    const setMode = m => { mode = m; $('pp-mode-move').className = 'btn ' + (m === 'move' ? 'btn-primary' : 'btn-outline'); $('pp-mode-set').className = 'btn ' + (m === 'set' ? 'btn-primary' : 'btn-outline'); document.querySelector('.pp-move').style.display = m === 'move' ? '' : 'none'; document.querySelector('.pp-set').style.display = m === 'set' ? '' : 'none'; $('pp-from').required = $('pp-to').required = m === 'move'; };
+    const setMode = m => { mode = m; $('pp-mode-move').className = 'btn ' + (m === 'move' ? 'btn-primary' : 'btn-outline'); $('pp-mode-set').className = 'btn ' + (m === 'set' ? 'btn-primary' : 'btn-outline'); document.querySelector('.pp-move').style.display = m === 'move' ? '' : 'none'; document.querySelector('.pp-set').style.display = m === 'set' ? '' : 'none'; $('pp-from').required = $('pp-to').required = m === 'move'; if ($('pp-sumur')) sumurSync(); };
     $('pp-mode-move').onclick = () => setMode('move'); $('pp-mode-set').onclick = () => setMode('set'); setMode(mode);
     const byKode = k => wells.find(r => r['Kode Baru'] === k);
     const info = (id, hint) => { const r = byKode($(id).value), el = $(hint); if (!r) { el.textContent = ''; return; } const parts = [r[sumberCols.jenis], 'Kondisi sumur: ' + (String(r['Kondisi Sumur'] || '–').trim()), r['Status'] ? 'Status: ' + r['Status'] : '', r['Update'] ? 'Update: ' + r['Update'] : '', r[sumberCols.aktif] ? String(r[sumberCols.aktif]).trim() : '']; el.textContent = parts.filter(Boolean).join(' · '); el.className = 'edit-hint' + (/rusak/i.test(r['Kondisi Sumur'] || '') ? ' warn' : ''); };
     const applyWil = () => { const w = $('pp-wil').value; [['pp-from', withPump], ['pp-to', noPump], ['pp-one', wells]].forEach(([id, list]) => { const cur = $(id).value; const first = $(id).options[0].outerHTML; $(id).innerHTML = first + opt(list.filter(r => !w || String(r['Wilayah']).trim() === w), cur); }); info('pp-from', 'pp-from-i'); info('pp-to', 'pp-to-i'); info('pp-one', 'pp-one-i'); };
     $('pp-wil').onchange = applyWil; applyWil();
-    $('pp-from').onchange = () => info('pp-from', 'pp-from-i'); $('pp-to').onchange = () => info('pp-to', 'pp-to-i'); $('pp-one').onchange = () => { info('pp-one', 'pp-one-i'); const r = byKode($('pp-one').value); if (r && POMPA.includes(r['Pompa'])) $('pp-one-val').value = r['Pompa']; };
+    // deskripsi pompa dari sheet Pompa Sumur (tab Sumur Bor) untuk sumur asal (mode pindah) / sumur terpilih (mode ubah)
+    var ketAuto = ''; var SI = null;
+    function sumurSync() {
+      const byKode = k => wells.find(x => x['Kode Baru'] === k);
+      const r = byKode(mode === 'move' ? $('pp-from').value : $('pp-one').value), box = $('pp-sumur');
+      SI = r && F().sumurInfo ? (F().sumurInfo(r['Kode Baru']) || F().sumurInfo(String(r[sumberCols.lok] || '').split(/\s+/).join(''))) : null;
+      if (!SI) { box.style.display = 'none'; $('pp-sumur-mv').disabled = true; $('pp-sumur-mv').parentElement.style.opacity = .55; if (r && $('pp-ket').value === ketAuto) { $('pp-ket').value = ''; ketAuto = ''; } return; }
+      box.style.display = ''; $('pp-sumur-d').textContent = SI.desc; $('pp-sumur-mv').disabled = false; $('pp-sumur-mv').parentElement.style.opacity = 1;
+      const to = mode === 'move' ? byKode($('pp-to').value) : null;
+      const auto = SI.desc + (to ? ' → dipindah ke ' + to['Kode Baru'] + ' (' + String(to[sumberCols.lok] || '').trim() + ')' : '');
+      if (!$('pp-ket').value || $('pp-ket').value === ketAuto) { $('pp-ket').value = auto; } ketAuto = auto;
+    }
+    $('pp-sumur-go').onclick = () => { if (!SI) return; close(); F().switchTab && F().switchTab('sumur'); setTimeout(() => F().showDetail && F().showDetail('sumur', SI.row._i), 250); };
+    $('pp-from').onchange = () => { info('pp-from', 'pp-from-i'); sumurSync(); }; $('pp-to').onchange = () => { info('pp-to', 'pp-to-i'); sumurSync(); }; $('pp-one').onchange = () => { info('pp-one', 'pp-one-i'); const r = byKode($('pp-one').value); if (r && POMPA.includes(r['Pompa'])) $('pp-one-val').value = r['Pompa']; sumurSync(); };
+    sumurSync();
     $('ppForm').onsubmit = async e => {
       e.preventDefault();
       const pin = $('pp-pin').value.trim(), msg = $('pp-msg'), btn = $('pp-save'), err = m => { msg.textContent = m; msg.className = 'wide edit-msg err'; };
@@ -415,11 +431,13 @@
       }
       btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menyimpan ke spreadsheet…';
       try {
-        const j = await post({ action: 'pump', pin, user: $('pp-user').value.trim(), mode: mode === 'move' ? 'PINDAH POMPA' : 'UBAH POMPA', changes, keterangan: $('pp-ket').value.trim() });
+        const to = mode === 'move' ? byKode($('pp-to').value) : null;
+        const sumur = mode === 'move' && SI && $('pp-sumur-mv').checked && !$('pp-sumur-mv').disabled && to ? { fromLokasi: SI.lokasi, toLokasi: String(to[sumberCols.lok] || '').trim().toUpperCase().replace(/\s+/g, ''), toKode: to['Kode Baru'] } : null;
+        const j = await post({ action: 'pump', pin, user: $('pp-user').value.trim(), mode: mode === 'move' ? 'PINDAH POMPA' : 'UBAH POMPA', changes, keterangan: $('pp-ket').value.trim(), sumur });
         if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
         localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('pp-user').value.trim());
         (j.results || []).forEach(x => { const r = byKode(x.kode); if (!r) return; r['Pompa'] = x.to; if (x.status !== undefined && x.status !== '') r['Status'] = x.status; if (x.update !== undefined && x.update !== '') r['Update'] = x.update; if (F().refreshRow) F().refreshRow('sumber', r); });
-        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Tersimpan: ' + (j.results || []).map(x => x.kode + ' ' + (x.from || '(kosong)') + ' → ' + x.to + ' (baris ' + x.row + ')').join(' ; ') + '. Menyinkronkan ulang…';
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Tersimpan: ' + (j.results || []).map(x => x.kode + ' ' + (x.from || '(kosong)') + ' → ' + x.to + ' (baris ' + x.row + ')').join(' ; ') + (j.sumur ? (j.sumur.ok ? ' · catatan Pompa Sumur ' + j.sumur.from + ' → ' + j.sumur.to + ' (baris ' + j.sumur.row + ')' : ' · ⚠ Pompa Sumur: ' + j.sumur.error) : '') + '. Menyinkronkan ulang…';
         toast(mode === 'move' ? 'Pompa dipindah ' + changes[0].kode + ' → ' + changes[1].kode + ' ✔' : 'Pompa ' + changes[0].kode + ' → ' + changes[0].pompa + ' ✔');
         setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1800);
       } catch (ex) {

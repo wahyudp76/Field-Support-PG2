@@ -29,7 +29,7 @@ var SPREADSHEET_ID = '1WbGTDqC0Anh6O54twsJfiBiWcTri7FHyQjXIFrOoLz4'; // dipakai 
 var SHEET_DETAIL = 'Detail Terpasang';
 var SHEET_LOG = 'Log Perpindahan';      // dibuat otomatis bila belum ada
 var SHEET_MESIN = 'Mesin', SHEET_IRR = 'Irrigator';
-var SHEET_SUMBER = 'Sumber Air', SHEET_LOG_POMPA = 'Log Pompa Sumur'; // kolom "Pompa" di sheet Sumber Air
+var SHEET_SUMBER = 'Sumber Air', SHEET_LOG_POMPA = 'Log Pompa Sumur', SHEET_POMPA_SUMUR = 'Pompa Sumur'; // kolom "Pompa" di sheet Sumber Air
 var MAX_HISTORY = 400;                  // panjang maksimal kolom Keterangan
 
 function doGet(e) {
@@ -38,7 +38,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 7, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 8, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | pump) atau ?action=ping' });
 }
@@ -321,10 +321,41 @@ function pump_(b) {
     var aksi = String(b.mode || (plan.length > 1 ? 'PINDAH POMPA' : 'UBAH POMPA')).toUpperCase(), note = String(b.keterangan || '');
     if (plan.length > 1) note = (note ? note + ' | ' : '') + plan.map(function (x) { return x.kode; }).join(' → ');
     results.forEach(function (r) { lg.appendRow([new Date(), b.user || '', aksi, r.kode, r.lokasi, r.row, r.from, r.to, note]); });
-    return out_({ ok: true, results: results });
+    // opsional: pindahkan catatan pompa di sheet "Pompa Sumur" (kolom LOKASI) ke lokasi sumur tujuan
+    var sumurRes = null;
+    if (b.sumur && b.sumur.fromLokasi && b.sumur.toLokasi) sumurRes = movePompaSumur_(ss, String(b.sumur.fromLokasi), String(b.sumur.toLokasi), String(b.sumur.toKode || ''), b.user || '');
+    return out_({ ok: true, results: results, sumur: sumurRes });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }
+}
+
+// Pindahkan catatan pompa sumur: cari baris dengan LOKASI = fromLokasi (abaikan spasi/huruf besar), ubah ke toLokasi, tambah riwayat di Keterangan
+function movePompaSumur_(ss, fromLok, toLok, toKode, user) {
+  try {
+    var sh = ss.getSheetByName(SHEET_POMPA_SUMUR); if (!sh) return { ok: false, error: 'Sheet "' + SHEET_POMPA_SUMUR + '" tidak ditemukan' };
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var cLok = headers.map(function (h) { return h.toUpperCase(); }).indexOf('LOKASI') + 1, cKet = headers.indexOf('Keterangan') + 1;
+    if (!cLok) return { ok: false, error: 'Kolom LOKASI tidak ada di sheet ' + SHEET_POMPA_SUMUR };
+    var norm = function (v) { return String(v || '').toUpperCase().replace(/\s+/g, ''); };
+    var vals = lastRow >= 2 ? sh.getRange(2, cLok, lastRow - 1, 1).getValues() : [], row = 0, dup = false;
+    for (var i = 0; i < vals.length; i++) if (norm(vals[i][0]) === norm(fromLok)) { if (row) dup = true; row = i + 2; }
+    if (!row) return { ok: false, error: 'Lokasi ' + fromLok + ' tidak ada di sheet ' + SHEET_POMPA_SUMUR };
+    if (dup) return { ok: false, error: 'Lokasi ' + fromLok + ' ganda di sheet ' + SHEET_POMPA_SUMUR + ' — rapikan dulu' };
+    for (var j = 0; j < vals.length; j++) if (norm(vals[j][0]) === norm(toLok) && j + 2 !== row) return { ok: false, error: 'Lokasi tujuan ' + toLok + ' sudah punya catatan pompa di sheet ' + SHEET_POMPA_SUMUR };
+    // pertahankan gaya penulisan lokasi yang ada (huruf kecil / kapital)
+    var oldRaw = String(vals[row - 2][0]), newVal = /[a-z]/.test(oldRaw) && !/[A-Z]/.test(oldRaw) ? toLok.toLowerCase() : toLok.toUpperCase();
+    sh.getRange(row, cLok).setValue(newVal);
+    if (cKet) {
+      var stamp = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy');
+      var oldKet = String(sh.getRange(row, cKet).getDisplayValue()).trim();
+      var hist = 'Pindah dari ' + norm(fromLok) + (toKode ? ' ke ' + toKode : '') + ' ' + stamp + (user ? ' (' + user + ')' : '');
+      var ket = [oldKet, hist].filter(String).join(' | '); if (ket.length > MAX_HISTORY) ket = ket.slice(0, MAX_HISTORY - 1) + '…';
+      sh.getRange(row, cKet).setValue(ket);
+    }
+    return { ok: true, row: row, from: norm(fromLok), to: norm(toLok) };
+  } catch (err) { return { ok: false, error: String(err && err.message || err) }; }
 }
 
 // ambil pola rumus relatif (R1C1) kolom No: dari baris yang dihapus, atau baris lain yang berumus

@@ -21,6 +21,33 @@
   // ambil nilai kolom, coba sinonim bila kolom tidak ada
   const val = (r, ...names) => { for (const n of names) if (r[n] !== undefined) return r[n]; return ''; };
   const fmt = (n, d = 0) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n || 0);
+  const avgStr = (rows, k) => { const v = rows.map(r => parseFloat(String(r[k] || '').replace(',', '.'))).filter(n => isFinite(n)); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toLocaleString('id-ID', { maximumFractionDigits: 1 }) : '–'; };
+  // token kode lokasi: "007 F" → 007F, "001A C 006C C1 G" → 001A,001C,006C,006C1,006G
+  const lokTokens = s => { const out = []; let num = null; for (const t of String(s || '').toUpperCase().replace(/[,;/]+/g, ' ').split(/\s+/)) { const m = /^(\d{3})([A-Z]\d*)?$/.exec(t); if (m) { num = m[1]; out.push(num + (m[2] || '')); } else if (/^[A-Z]\d*$/.test(t) && num) out.push(num + t); } return out; };
+  /* Pompa Sumur: normalisasi LOKASI, tautkan ke Sumber Air (Kode Baru/Wilayah/Pompa/Status), hitung komponen bekas & umur maintenance */
+  const SUMUR_DERIVED = ['Kode Sumur', 'Wilayah', 'Pompa (Sumber Air)', 'Status (Sumber Air)', 'Komponen Bekas/Repair', 'Hari Sejak Maintenance'];
+  function enrichSumur(s) {
+    if (!s || s.error || !s.headers.length) return;
+    const S = RAW.sumber && !RAW.sumber.error ? RAW.sumber.rows : [];
+    const byCode = new Map();
+    S.forEach(r => { if (!/deep|sumur|bor/i.test(r['Jenis Sumber Air'] || '')) return; lokTokens(r['Lokasi']).forEach(c => { if (!byCode.has(c)) byCode.set(c, r); }); });
+    S.forEach(r => { if (!/deep|sumur|bor/i.test(r['Jenis Sumber Air'] || '')) return; lokTokens(r['Kedekatan Lokasi']).forEach(c => { if (!byCode.has(c)) byCode.set(c, r); }); });
+    const lokH = altKey(s.headers, 'LOKASI') || 'LOKASI', tglH = s.headers.find(h => /tgl|tanggal/i.test(h));
+    const condCols = s.headers.filter(h => /^kondisi\s/i.test(h) && !/akhir sumur/i.test(h)).concat(s.headers.filter(h => /^baut\+mur pipa/i.test(h)));
+    if (!s.headers.includes('Kode Sumur')) { const i = s.headers.indexOf(lokH) + 1; s.headers.splice(i, 0, ...SUMUR_DERIVED); }
+    const today = Date.now();
+    s.rows.forEach(r => {
+      const lok = String(r[lokH] || '').trim().toUpperCase().replace(/\s+/g, ''); r[lokH] = lok;
+      const sa = byCode.get(lok) || null;
+      r['Kode Sumur'] = sa ? sa['Kode Baru'] : ''; r['Wilayah'] = sa ? String(sa['Wilayah'] || '').trim() : ''; r['Pompa (Sumber Air)'] = sa ? String(sa['Pompa'] || '').trim() : ''; r['Status (Sumber Air)'] = sa ? String(sa['Status'] || '').trim() : '';
+      r['Komponen Bekas/Repair'] = String(condCols.filter(h => /bekas|repair|rusak/i.test(r[h] || '')).length);
+      const d = tglH && /^\d{4}-\d{2}-\d{2}$/.test(r[tglH] || '') ? new Date(r[tglH]) : null;
+      r['Hari Sejak Maintenance'] = d ? String(Math.max(0, Math.round((today - d.getTime()) / 864e5))) : '';
+      r._sumurParts = condCols.filter(h => /bekas|repair|rusak/i.test(r[h] || '')).map(h => h.replace(/^kondisi\s+/i, '').trim());
+    });
+    s.meta = s.meta || {}; s.meta.condCols = condCols; s.meta.lokH = lokH; s.meta.tglH = tglH;
+  }
+  function sumurPartStats(rows) { const m = new Map(); rows.forEach(r => (r._sumurParts || []).forEach(p => m.set(p, (m.get(p) || 0) + 1))); return [...m.entries()].sort((a, b) => b[1] - a[1]); }
   const count = (rows, k) => { const m = new Map(); for (const r of rows) { const v = r[k] || '(kosong)'; m.set(v, (m.get(v) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1]); };
   const isTrue = (v, re) => re.test(String(v || ''));
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
@@ -85,6 +112,34 @@
         'Kondisi Sumur': v => /baik/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : /perbaikan/i.test(v) ? 'chip-amber' : 'chip-gray'
       },
       numCols: ['Luas Badan Air', 'Volume Real Ukur (Overflow Terbuka)', 'Volume Potensi Maksimal (Overflow Terbuka)']
+    },
+    sumur: {
+      title: 'Pompa Sumur Bor (catatan maintenance & komponen)', icon: '🛢️',
+      freezeUntil: 'Wilayah',
+      filters: ['Wilayah', 'Keterangan', 'Kondisi Akhir Sumur', 'Pompa (Sumber Air)', 'Kondisi Bowl', 'Kondisi Line Shaft', 'Jenis/Merk Pompa', 'Komponen Bekas/Repair'],
+      kpis: [
+        { label: 'Pompa Sumur Tercatat', icon: '🛢️', c: '#38bdf8', fn: r => r.length, sub: r => { const n = r.filter(x => x['Kode Sumur']).length; return n + ' terhubung ke Sumber Air'; } },
+        { label: 'Siap Pakai', icon: '✅', c: '#22c55e', fn: r => r.filter(x => /siap/i.test(x['Keterangan'] || '')).length, sub: r => { const n = r.filter(x => x['Keterangan'] && !/siap/i.test(x['Keterangan'])).length; return n ? n + ' status lain' : ''; } },
+        { label: 'Sumur Baik', icon: '🟢', c: '#14b8a6', fn: r => r.filter(x => /baik/i.test(x['Kondisi Akhir Sumur'] || '')).length },
+        { label: 'Ada Komponen Bekas/Repair', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => Number(x['Komponen Bekas/Repair']) > 0).length },
+        { label: 'Rata-rata Kedalaman Pompa (m)', icon: '📏', c: '#a78bfa', fn: r => avgStr(r, 'Kedalaman pompa (m)'), sub: r => { const a = avgStr(r, 'Jumlah Pipa Kolom (Batang)'); return a !== '–' ? 'rata-rata ' + a + ' pipa kolom' : ''; } },
+        { label: 'Rata-rata Kedalaman Sumur (m)', icon: '🕳️', c: '#6366f1', fn: r => avgStr(r, 'Kedalaman Sumur (m)'), sub: r => { const a = avgStr(r, 'Statistic Water Level (m)'); return a !== '–' ? 'SWL rata-rata ' + a + ' m' : ''; } },
+        { label: 'Maintenance > 180 hari', icon: '⏰', c: '#ef4444', fn: r => r.filter(x => Number(x['Hari Sejak Maintenance']) > 180).length, sub: r => { const n = r.filter(x => x['Hari Sejak Maintenance'] === '').length; return n ? n + ' tanpa tanggal' : ''; } },
+        { label: 'Pompa di Sumber Air', icon: '🔄', c: '#ec4899', fn: r => r.filter(x => /ada/i.test(x['Pompa (Sumber Air)'] || '')).length, sub: r => { const n = r.filter(x => x['Kode Sumur'] && !/ada/i.test(x['Pompa (Sumber Air)'] || '')).length; return n ? n + ' tercatat tanpa pompa di Sumber Air' : ''; } },
+      ],
+      charts: [
+        { id: 'c1', title: 'Pompa Sumur per Wilayah', type: 'bar', key: 'Wilayah' },
+        { id: 'c2', title: 'Kondisi Bowl', type: 'doughnut', key: 'Kondisi Bowl', colors: { Baru: '#22c55e', Bekas: '#f59e0b', Repair: '#ef4444' } },
+        { id: 'c3', title: 'Status Pompa (Keterangan)', type: 'doughnut', key: 'Keterangan', colors: { 'SIAP PAKAI': '#22c55e' } },
+        { id: 'c4', title: 'Komponen Bekas / Repair Terbanyak', type: 'hbar', custom: 'sumurParts' },
+      ],
+      chips: {
+        'Keterangan': v => /siap/i.test(v) ? 'chip-green' : /rusak|repair/i.test(v) ? 'chip-red' : 'chip-amber',
+        'Kondisi Akhir Sumur': v => /baik/i.test(v) ? 'chip-green' : 'chip-red',
+        'Pompa (Sumber Air)': v => /ada/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
+        'Komponen Bekas/Repair': v => Number(v) > 0 ? 'chip-amber' : 'chip-green',
+        'Hari Sejak Maintenance': v => Number(v) > 180 ? 'chip-red' : Number(v) > 90 ? 'chip-amber' : 'chip-green'
+      }
     },
     mesin: {
       title: 'Inventaris Mesin / Engine', icon: '⚙️',
@@ -208,6 +263,9 @@
       }
       // pre-compute string pencarian per baris (performa)
       s.rows.forEach(r => { r._s = s.headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); });
+      if (k === 'sumur') enrichSumur(s);
+      // pre-compute ulang string pencarian bila kolom turunan ditambahkan
+      if (k === 'sumur') s.rows.forEach(r => { r._s = s.headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); });
       s.stale = false; RAW[k] = s;
       if (s.error) errs.push(s.name + ': ' + s.error);
       if (!state[k]) state[k] = newState();
@@ -263,6 +321,7 @@
         <div class="fgroup" style="flex:0;min-width:auto"><label>&nbsp;</label><button class="btn btn-outline" id="${k}-reset">✕ Reset</button></div>
       </div>
       <div class="active-filters" id="${k}-af"></div>
+      ${k === 'sumur' ? '<div class="card sumur-resume" id="sumur-resume"></div>' : ''}
       <div class="charts">${cfg.charts.map(c => `<div class="card"><h3>${esc(c.title)}</h3><div class="chart-box"><canvas id="${k}-${c.id}"></canvas></div></div>`).join('')}</div>
       <div class="tbl-head">
         <h3>${cfg.icon} ${esc(cfg.title)}</h3>
@@ -377,6 +436,7 @@
 
     $(k + '-kpis').innerHTML = cfg.kpis.map(x => `<div class="kpi" style="--c:${x.c}"><div class="icon">${x.icon}</div><div class="val">${x.fn(rows)}</div><div class="lbl">${x.label}</div>${x.sub && x.sub(rows) ? `<div class="sub">${esc(x.sub(rows))}</div>` : ''}</div>`).join('');
 
+    if (k === 'sumur') renderSumurResume(rows);
     // chip filter aktif
     const af = [];
     Object.entries(s.filters).forEach(([f, set]) => set && set.size && (set.size <= 3
@@ -387,6 +447,7 @@
 
     requestAnimationFrame(() => cfg.charts.forEach(c => {
       if (c.custom === 'components') { drawChart(k + '-' + c.id, 'hbar', componentStats(k, rows), 10); return; }
+      if (c.custom === 'sumurParts') { const st = sumurPartStats(rows); if (!st.length) { noChart(k + '-' + c.id, 'Komponen bekas/repair'); return; } drawChart(k + '-' + c.id, 'hbar', st, 10); return; }
       const key = altKey(headers, c.key);
       if (!key) { noChart(k + '-' + c.id, c.key); return; }
       const all = count(rows, key), blank = all.find(x => x[0] === '(kosong)');
@@ -474,7 +535,7 @@
   /* ---------- detail modal ---------- */
   function showDetail(k, i) {
     const r = RAW[k].rows.find(x => x._i === i); if (!r) return;
-    const title = r['Kode Unit'] || r['KODE UNIT'] || r['Kode Engine'] || r['Kode Baru'] || CONFIG[k].title;
+    const title = r['Kode Unit'] || r['KODE UNIT'] || r['Kode Engine'] || r['Kode Baru'] || (r['LOKASI'] ? 'Pompa Sumur ' + r['LOKASI'] + (r['Kode Sumur'] ? ' · ' + r['Kode Sumur'] : '') : '') || CONFIG[k].title;
     $('modalTitle').textContent = CONFIG[k].icon + ' ' + title;
     const editBar = k === 'detail' && window.FSEdit ? `<div class="kv edit-bar"><span>Pindahkan unit ini ke lokasi lain — perubahan langsung ditulis ke sheet <b>Detail Terpasang</b> (butuh PIN).</span><button class="btn btn-primary" type="button" onclick="FSEdit.open(${r._i})">✏️ Pindah Unit</button></div>` : '';
     const pumpBar = k === 'sumber' && window.FSEdit && /deep|sumur|bor/i.test(r['Jenis Sumber Air'] || '') ? `<div class="kv edit-bar"><span>Pompa: <b>${esc(r['Pompa'] || 'belum diisi')}</b> — pindahkan pompa ke sumur lain atau ubah kondisinya; ditulis ke kolom <b>Pompa</b> sheet <b>Sumber Air</b> (butuh PIN).</span><button class="btn btn-primary" type="button" onclick="FSEdit.pump('${esc(String(r['Kode Baru'] || '')).replace(/'/g, '')}')">🔄 Pindah Pompa Sumur</button></div>` : '';
@@ -590,6 +651,7 @@
       { l: 'Total Sumber Air', v: fmt(s.length), i: '🌊', c: '#a78bfa', t: 'sumber' },
       { l: 'Lebung', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length), i: '🏞️', c: '#14b8a6', t: 'sumber' },
       { l: 'Deep Well', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /deep|sumur/i)).length), i: '🕳️', c: '#f59e0b', t: 'sumber' },
+      { l: 'Pompa Sumur Bor', v: fmt((RAW.sumur && !RAW.sumur.error ? RAW.sumur.rows : []).length), i: '🛢️', c: '#0ea5e9', t: 'sumur' },
       { l: 'Total Mesin', v: fmt(m.length), i: '⚙️', c: '#ec4899', t: 'mesin' },
       { l: 'Total Irrigator', v: fmt(ir.length), i: '💦', c: '#06b6d4', t: 'irrigator' },
       { l: 'Volume Air Real (m³)', v: fmt(sum(s, 'Volume Real Ukur (Overflow Terbuka)')), i: '📏', c: '#6366f1', t: 'sumber' },
@@ -614,6 +676,42 @@
   }
   $('ov-kpis').addEventListener('click', e => { const c = e.target.closest('[data-t]'); if (c) switchTab(c.dataset.t); });
 
+
+  /* ---------- SUMUR BOR: resume analisa ---------- */
+  function renderSumurResume(rows) {
+    const el = $('sumur-resume'); if (!el) return;
+    const all = RAW.sumur.rows, meta = RAW.sumur.meta || {}, S = RAW.sumber && !RAW.sumber.error ? RAW.sumber.rows : [];
+    if (!all.length) { el.innerHTML = '<h3>Resume Analisa Sumur Bor</h3><div class="empty">Belum ada data pada sheet Pompa Sumur</div>'; return; }
+    const n = rows.length, siap = rows.filter(x => /siap/i.test(x['Keterangan'] || '')).length, baik = rows.filter(x => /baik/i.test(x['Kondisi Akhir Sumur'] || '')).length;
+    const linked = rows.filter(x => x['Kode Sumur']), unlinked = rows.filter(x => !x['Kode Sumur']);
+    const bekas = rows.filter(x => Number(x['Komponen Bekas/Repair']) > 0), over = rows.filter(x => Number(x['Hari Sejak Maintenance']) > 180).sort((a, b) => Number(b['Hari Sejak Maintenance']) - Number(a['Hari Sejak Maintenance']));
+    const noPump = linked.filter(x => !/ada/i.test(x['Pompa (Sumber Air)'] || ''));
+    const recorded = new Set(all.map(x => x[meta.lokH]));
+    const saPumps = S.filter(r => /deep|sumur|bor/i.test(r['Jenis Sumber Air'] || '') && /ada/i.test(r['Pompa'] || ''));
+    const saNoRecord = saPumps.filter(r => !lokTokens(r['Lokasi']).some(c => recorded.has(c)) && !lokTokens(r['Kedekatan Lokasi']).some(c => recorded.has(c)));
+    const parts = sumurPartStats(rows).slice(0, 4);
+    const wil = count(rows, 'Wilayah').filter(x => x[0] !== '(kosong)');
+    const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '–';
+    const last = rows.filter(x => x[meta.tglH]).sort((a, b) => String(b[meta.tglH]).localeCompare(String(a[meta.tglH])))[0];
+    const lokList = (arr, f) => arr.slice(0, 12).map(x => `<span class="chip chip-gray clickable" data-lok="${esc(x[meta.lokH] || x['Lokasi'] || '')}" title="Buka detail">${esc(f ? f(x) : x[meta.lokH])}</span>`).join(' ') + (arr.length > 12 ? ` <small>+${arr.length - 12} lagi</small>` : '');
+    el.innerHTML = `<h3>Resume Analisa Sumur Bor <span class="blank-note">sheet Pompa Sumur · ${fmt(n)} dari ${fmt(all.length)} catatan</span></h3>
+      <div class="sumur-grid">
+        <div class="sr-block"><div class="big" style="color:#22c55e">${pct(siap, n)}</div><div class="lbl">Siap pakai (${siap}/${n})</div><div class="sub">Kondisi akhir sumur baik: <b>${baik}</b> · rata-rata kedalaman pompa <b>${avgStr(rows, 'Kedalaman pompa (m)')} m</b> (${avgStr(rows, 'Jumlah Pipa Kolom (Batang)')} pipa kolom) · kedalaman sumur <b>${avgStr(rows, 'Kedalaman Sumur (m)')} m</b> · SWL <b>${avgStr(rows, 'Statistic Water Level (m)')} m</b>${last ? ' · maintenance terakhir <b>' + esc(last[meta.tglH]) + '</b> (' + esc(last[meta.lokH]) + ')' : ''}</div></div>
+        <div class="sr-block"><div class="big" style="color:#f59e0b">${bekas.length}</div><div class="lbl">Pompa dengan komponen bekas / repair</div><div class="sub">${parts.length ? parts.map(([p, c]) => esc(p) + ' <b>' + c + '</b>').join(' · ') : 'Semua komponen tercatat baru'}</div></div>
+        <div class="sr-block"><div class="big" style="color:${over.length ? '#ef4444' : '#22c55e'}">${over.length}</div><div class="lbl">Maintenance &gt; 180 hari</div><div class="sub">${over.length ? lokList(over, x => x[meta.lokH] + ' · ' + x['Hari Sejak Maintenance'] + ' hr') : 'Semua pompa dirawat dalam 6 bulan terakhir'}</div></div>
+        <div class="sr-block"><div class="big" style="color:#38bdf8">${pct(linked.length, n)}</div><div class="lbl">Terhubung ke sheet Sumber Air (${linked.length}/${n})</div><div class="sub">${unlinked.length ? '⚠️ Lokasi tidak ditemukan di Sumber Air: ' + lokList(unlinked) : '✓ Semua lokasi dikenali'}${noPump.length ? '<br>⚠️ Tercatat di Pompa Sumur tetapi kolom Pompa di Sumber Air bukan "Ada Pompa": ' + lokList(noPump, x => x[meta.lokH] + ' (' + (x['Pompa (Sumber Air)'] || 'kosong') + ')') : ''}${saNoRecord.length ? '<br>ℹ️ Sumur "Ada Pompa" di Sumber Air tanpa catatan di Pompa Sumur: ' + saNoRecord.slice(0, 12).map(r => '<span class="chip chip-gray">' + esc(r['Kode Baru']) + ' · ' + esc(String(r['Lokasi']).trim()) + '</span>').join(' ') + (saNoRecord.length > 12 ? ' <small>+' + (saNoRecord.length - 12) + ' lagi</small>' : '') : ''}</div></div>
+      </div>
+      ${wil.length ? `<ul class="mini-list sr-wil">${wil.map(([w, c]) => `<li><b>${esc(w)}</b><div class="bar"><span style="width:${c / wil[0][1] * 100}%"></span></div><span>${c} pompa</span></li>`).join('')}</ul>` : ''}`;
+    el.onclick = e => { const c = e.target.closest('[data-lok]'); if (!c) return; const r = RAW.sumur.rows.find(x => x[meta.lokH] === c.dataset.lok); if (r) showDetail('sumur', r._i); };
+  }
+  // dipakai tab lain (Pindah Pompa): deskripsi ringkas pompa sumur untuk sebuah lokasi / kode sumur
+  function sumurInfo(lokOrKode) {
+    const s = RAW.sumur; if (!s || s.error) return null; const meta = s.meta || {}; const q = String(lokOrKode || '').trim().toUpperCase().replace(/\s+/g, '');
+    const r = s.rows.find(x => x[meta.lokH] === q || x['Kode Sumur'] === q); if (!r) return null;
+    const parts = (r._sumurParts || []);
+    const desc = ['Pompa sumur ' + r[meta.lokH], r['Jenis/Merk Pompa'] ? String(r['Jenis/Merk Pompa']).trim() : '', r['Jumlah Pipa Kolom (Batang)'] ? r['Jumlah Pipa Kolom (Batang)'] + ' pipa kolom' : '', r['Kedalaman pompa (m)'] ? 'kedalaman pompa ' + r['Kedalaman pompa (m)'] + ' m' : '', r['Kedalaman Sumur (m)'] ? 'sumur ' + r['Kedalaman Sumur (m)'] + ' m' : '', r['Statistic Water Level (m)'] ? 'SWL ' + r['Statistic Water Level (m)'] + ' m' : '', r[meta.tglH] ? 'maint. ' + r[meta.tglH] : '', parts.length ? 'bekas/repair: ' + parts.join(', ') : 'komponen baru', r['Keterangan'] ? String(r['Keterangan']).trim() : ''].filter(Boolean).join(' · ');
+    return { row: r, lokasi: r[meta.lokH], desc };
+  }
 
   /* ---------- PIPA (matriks ringkasan: Placement × jenis × kondisi) ---------- */
   const PIPA_COND = ['Good', 'Average', 'Poor', 'Reject'];
@@ -1144,7 +1242,7 @@
   window.addEventListener('appinstalled', () => { toast('Aplikasi berhasil dipasang ✔'); const b = $('installBtn'); if (b) b.style.display = 'none'; });
 
   /* ---------- jembatan untuk modul edit (edit.js) ---------- */
-  window.__FS = { RAW, loadData, toast, esc, fmt,
+  window.__FS = { RAW, loadData, toast, esc, fmt, sumurInfo, showDetail, switchTab,
     refreshRow: (k, r) => { r._s = RAW[k].headers.map(h => r[h]).join(' \u0001 ').toLowerCase(); dirty[k] = true; closeModal(); renderView(k); },
     removeRow: (k, r) => { RAW[k].rows = RAW[k].rows.filter(x => x !== r); dirty[k] = true; closeModal(); renderView(k); $('badge-' + k).textContent = fmt(RAW[k].rows.length); } };
 
