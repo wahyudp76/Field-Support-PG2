@@ -20,7 +20,7 @@ window.APP_CONFIG = {
   sheets: {
     detail:    { name: 'Detail Terpasang', endHeader: 'Kode Air' },
     sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
-    sumur:     { name: 'Pompa Sumur',      endHeader: 'Keterangan', keyHeader: 'LOKASI' }, // catatan pompa sumur bor (maintenance & komponen) per lokasi
+    sumur:     { name: 'Pompa Sumur',      endHeader: 'Grease (kg)', keyHeader: 'LOKASI' }, // catatan pompa sumur bor (maintenance & komponen) per lokasi
     mesin:     { name: 'Mesin',            endHeader: null, keyHeader: 'Kode Unit' }, // berhenti di header kosong pertama
     irrigator: { name: 'Irrigator',        endHeader: null, keyHeader: 'KODE UNIT' }, // berhenti di header kosong pertama (kolom inspeksi SKOR/KONDISI ikut terbaca)
     pipa:      { name: 'Pipa',             endHeader: 'Grand Total' }, // matriks ringkasan: Placement × jenis × kondisi (satuan: batang)

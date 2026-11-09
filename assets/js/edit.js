@@ -382,7 +382,7 @@
           <label>Kondisi pompa baru <select id="pp-one-val">${POMPA.map(v => `<option ${sel && v === sel['Pompa'] ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         </div>
         <div class="wide edit-cur" id="pp-sumur" style="display:none"><b>🛢️ Deskripsi pompa (tab Sumur Bor)</b><div class="sumur-desc" id="pp-sumur-d"></div><div style="margin-top:6px"><button type="button" class="btn btn-outline" id="pp-sumur-go">Buka di tab Sumur Bor</button></div></div>
-        <label class="wide chk pp-move"><input type="checkbox" id="pp-sumur-mv" checked> Pindahkan juga catatan pompa di sheet <b>Pompa Sumur</b> ke lokasi sumur tujuan (kolom LOKASI diubah, riwayat ditambahkan di Keterangan)</label>
+        <label class="wide chk pp-move"><input type="checkbox" id="pp-sumur-mv" checked> Pindahkan juga catatan pompa di sheet <b>Pompa Sumur</b> ke lokasi sumur tujuan (kolom LOKASI diubah; riwayat dicatat di sheet Log Pompa Sumur)</label>
         <label class="wide">Keterangan <small class="edit-cnt" title="Diisi otomatis dari deskripsi Sumur Bor; bisa diubah">auto</small><input id="pp-ket" placeholder="mis. pompa dipindah karena sumur asal non irigasi"></label>
         <label>PIN <input id="pp-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
         <label>Nama pengisi <input id="pp-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
