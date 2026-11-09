@@ -25,7 +25,7 @@
   // token kode lokasi: "007 F" → 007F, "001A C 006C C1 G" → 001A,001C,006C,006C1,006G
   const lokTokens = s => { const out = []; let num = null; for (const t of String(s || '').toUpperCase().replace(/[,;/]+/g, ' ').split(/\s+/)) { const m = /^(\d{3})([A-Z]\d*)?$/.exec(t); if (m) { num = m[1]; out.push(num + (m[2] || '')); } else if (/^[A-Z]\d*$/.test(t) && num) out.push(num + t); } return out; };
   /* Pompa Sumur: normalisasi LOKASI, tautkan ke Sumber Air (Kode Baru/Wilayah/Pompa/Status), hitung komponen bekas & umur maintenance */
-  const SUMUR_DERIVED = ['Kode Sumur', 'Wilayah', 'Pompa (Sumber Air)', 'Status (Sumber Air)', 'Komponen Bekas/Repair', 'Hari Sejak Maintenance'];
+  const SUMUR_DERIVED = ['Status Catatan', 'Kode Sumur', 'Wilayah', 'Pompa (Sumber Air)', 'Status (Sumber Air)', 'Komponen Bekas/Repair', 'Hari Sejak Maintenance'];
   function enrichSumur(s) {
     if (!s || s.error || !s.headers.length) return;
     const S = RAW.sumber && !RAW.sumber.error ? RAW.sumber.rows : [];
@@ -40,6 +40,7 @@
       const lok = String(r[lokH] || '').trim().toUpperCase().replace(/\s+/g, ''); r[lokH] = lok;
       const sa = byCode.get(lok) || null;
       r['Kode Sumur'] = sa ? sa['Kode Baru'] : ''; r['Wilayah'] = sa ? String(sa['Wilayah'] || '').trim() : ''; r['Pompa (Sumber Air)'] = sa ? String(sa['Pompa'] || '').trim() : ''; r['Status (Sumber Air)'] = sa ? String(sa['Status'] || '').trim() : '';
+      r['Status Catatan'] = !sa ? 'Lokasi tak dikenal' : /ada/i.test(sa['Pompa'] || '') ? 'Aktif' : 'Pompa sudah dipindah';
       r['Komponen Bekas/Repair'] = String(condCols.filter(h => /bekas|repair|rusak/i.test(r[h] || '')).length);
       const d = tglH && /^\d{4}-\d{2}-\d{2}$/.test(r[tglH] || '') ? new Date(r[tglH]) : null;
       r['Hari Sejak Maintenance'] = d ? String(Math.max(0, Math.round((today - d.getTime()) / 864e5))) : '';
@@ -116,9 +117,9 @@
     sumur: {
       title: 'Pompa Sumur Bor (catatan maintenance & komponen)', icon: '🛢️',
       freezeUntil: 'Wilayah',
-      filters: ['Wilayah', 'Keterangan', 'Kondisi Akhir Sumur', 'Pompa (Sumber Air)', 'Kondisi Bowl', 'Kondisi Line Shaft', 'Jenis/Merk Pompa', 'Komponen Bekas/Repair'],
+      filters: ['Status Catatan', 'Wilayah', 'Keterangan', 'Kondisi Akhir Sumur', 'Pompa (Sumber Air)', 'Kondisi Bowl', 'Kondisi Line Shaft', 'Jenis/Merk Pompa', 'Komponen Bekas/Repair'],
       kpis: [
-        { label: 'Pompa Sumur Tercatat', icon: '🛢️', c: '#38bdf8', fn: r => r.length, sub: r => { const n = r.filter(x => x['Kode Sumur']).length; return n + ' terhubung ke Sumber Air'; } },
+        { label: 'Pompa Aktif (Ada Pompa)', icon: '🛢️', c: '#38bdf8', fn: r => r.filter(x => x['Status Catatan'] === 'Aktif').length, sub: r => { const h = r.filter(x => x['Status Catatan'] === 'Pompa sudah dipindah').length, u = r.filter(x => x['Status Catatan'] === 'Lokasi tak dikenal').length; return fmt(r.length) + ' catatan' + (h ? ' · ' + h + ' riwayat (pompa dipindah)' : '') + (u ? ' · ' + u + ' lokasi tak dikenal' : ''); } },
         { label: 'Siap Pakai', icon: '✅', c: '#22c55e', fn: r => r.filter(x => /siap/i.test(x['Keterangan'] || '')).length, sub: r => { const n = r.filter(x => x['Keterangan'] && !/siap/i.test(x['Keterangan'])).length; return n ? n + ' status lain' : ''; } },
         { label: 'Sumur Baik', icon: '🟢', c: '#14b8a6', fn: r => r.filter(x => /baik/i.test(x['Kondisi Akhir Sumur'] || '')).length },
         { label: 'Ada Komponen Bekas/Repair', icon: '🟠', c: '#f59e0b', fn: r => r.filter(x => Number(x['Komponen Bekas/Repair']) > 0).length },
@@ -137,6 +138,7 @@
         'Keterangan': v => /siap/i.test(v) ? 'chip-green' : /rusak|repair/i.test(v) ? 'chip-red' : 'chip-amber',
         'Kondisi Akhir Sumur': v => /baik/i.test(v) ? 'chip-green' : 'chip-red',
         'Pompa (Sumber Air)': v => /ada/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
+        'Status Catatan': v => v === 'Aktif' ? 'chip-green' : v === 'Pompa sudah dipindah' ? 'chip-gray' : 'chip-amber',
         'Komponen Bekas/Repair': v => Number(v) > 0 ? 'chip-amber' : 'chip-green',
         'Hari Sejak Maintenance': v => Number(v) > 180 ? 'chip-red' : Number(v) > 90 ? 'chip-amber' : 'chip-green'
       }
@@ -269,7 +271,8 @@
       s.stale = false; RAW[k] = s;
       if (s.error) errs.push(s.name + ': ' + s.error);
       if (!state[k]) state[k] = newState();
-      $('badge-' + k).textContent = fmt(s.rows.length);
+      $('badge-' + k).textContent = fmt(k === 'sumur' ? s.rows.filter(r => r['Status Catatan'] === 'Aktif').length : s.rows.length);
+      if (k === 'sumur') $('badge-' + k).title = fmt(s.rows.length) + ' catatan di sheet Pompa Sumur · angka = pompa aktif (Ada Pompa di Sumber Air)';
       buildView(k);
       dirty[k] = true;
     });
@@ -652,7 +655,7 @@
       { l: 'Total Sumber Air', v: fmt(s.length), i: '🌊', c: '#a78bfa', t: 'sumber' },
       { l: 'Lebung', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length), i: '🏞️', c: '#14b8a6', t: 'sumber' },
       { l: 'Deep Well', v: fmt(s.filter(x => isTrue(x['Jenis Sumber Air'], /deep|sumur/i)).length), i: '🕳️', c: '#f59e0b', t: 'sumber' },
-      { l: 'Pompa Sumur Bor', v: fmt((RAW.sumur && !RAW.sumur.error ? RAW.sumur.rows : []).length), i: '🛢️', c: '#0ea5e9', t: 'sumur' },
+      { l: 'Pompa Sumur Bor Aktif', v: fmt((RAW.sumur && !RAW.sumur.error ? RAW.sumur.rows : []).filter(x => x['Status Catatan'] === 'Aktif').length), i: '🛢️', c: '#0ea5e9', t: 'sumur' },
       { l: 'Total Mesin', v: fmt(m.length), i: '⚙️', c: '#ec4899', t: 'mesin' },
       { l: 'Total Irrigator', v: fmt(ir.length), i: '💦', c: '#06b6d4', t: 'irrigator' },
       { l: 'Volume Air Real (m³)', v: fmt(sum(s, 'Volume Real Ukur (Overflow Terbuka)')), i: '📏', c: '#6366f1', t: 'sumber' },
@@ -683,7 +686,7 @@
     const el = $('sumur-resume'); if (!el) return;
     const all = RAW.sumur.rows, meta = RAW.sumur.meta || {}, S = RAW.sumber && !RAW.sumber.error ? RAW.sumber.rows : [];
     if (!all.length) { el.innerHTML = '<h3>Resume Analisa Sumur Bor</h3><div class="empty">Belum ada data pada sheet Pompa Sumur</div>'; return; }
-    const n = rows.length, siap = rows.filter(x => /siap/i.test(x['Keterangan'] || '')).length, baik = rows.filter(x => /baik/i.test(x['Kondisi Akhir Sumur'] || '')).length;
+    const n = rows.length, aktif = rows.filter(x => x['Status Catatan'] === 'Aktif').length, hist = rows.filter(x => x['Status Catatan'] === 'Pompa sudah dipindah'), siap = rows.filter(x => /siap/i.test(x['Keterangan'] || '')).length, baik = rows.filter(x => /baik/i.test(x['Kondisi Akhir Sumur'] || '')).length;
     const linked = rows.filter(x => x['Kode Sumur']), unlinked = rows.filter(x => !x['Kode Sumur']);
     const bekas = rows.filter(x => Number(x['Komponen Bekas/Repair']) > 0), over = rows.filter(x => Number(x['Hari Sejak Maintenance']) > 180).sort((a, b) => Number(b['Hari Sejak Maintenance']) - Number(a['Hari Sejak Maintenance']));
     const noPump = linked.filter(x => !/ada/i.test(x['Pompa (Sumber Air)'] || ''));
@@ -697,6 +700,7 @@
     const lokList = (arr, f) => arr.slice(0, 12).map(x => `<span class="chip chip-gray clickable" data-lok="${esc(x[meta.lokH] || x['Lokasi'] || '')}" title="Buka detail">${esc(f ? f(x) : x[meta.lokH])}</span>`).join(' ') + (arr.length > 12 ? ` <small>+${arr.length - 12} lagi</small>` : '');
     el.innerHTML = `<h3>Resume Analisa Sumur Bor <span class="blank-note">sheet Pompa Sumur · ${fmt(n)} dari ${fmt(all.length)} catatan</span></h3>
       <div class="sumur-grid">
+        <div class="sr-block"><div class="big" style="color:#0ea5e9">${aktif}</div><div class="lbl">Pompa aktif · dari ${n} catatan</div><div class="sub">Jumlah pompa = catatan yang sumurnya berstatus <b>Ada Pompa</b> di Sumber Air.${hist.length ? ' <b>' + hist.length + '</b> catatan lama di lokasi yang pompanya sudah dipindah (riwayat, tidak dihitung): ' + lokList(hist, x => x[meta.lokH] + ' (' + (x['Pompa (Sumber Air)'] || 'kosong') + ')') : ''}</div></div>
         <div class="sr-block"><div class="big" style="color:#22c55e">${pct(siap, n)}</div><div class="lbl">Siap pakai (${siap}/${n})</div><div class="sub">Kondisi akhir sumur baik: <b>${baik}</b> · rata-rata kedalaman pompa <b>${avgStr(rows, 'Kedalaman pompa (m)')} m</b> (${avgStr(rows, 'Jumlah Pipa Kolom (Batang)')} pipa kolom) · kedalaman sumur <b>${avgStr(rows, 'Kedalaman Sumur (m)')} m</b> · SWL <b>${avgStr(rows, 'Statistic Water Level (m)')} m</b>${last ? ' · maintenance terakhir <b>' + esc(last[meta.tglH]) + '</b> (' + esc(last[meta.lokH]) + ')' : ''}</div></div>
         <div class="sr-block"><div class="big" style="color:#f59e0b">${bekas.length}</div><div class="lbl">Pompa dengan komponen bekas / repair</div><div class="sub">${parts.length ? parts.map(([p, c]) => esc(p) + ' <b>' + c + '</b>').join(' · ') : 'Semua komponen tercatat baru'}</div></div>
         <div class="sr-block"><div class="big" style="color:${over.length ? '#ef4444' : '#22c55e'}">${over.length}</div><div class="lbl">Maintenance &gt; 180 hari</div><div class="sub">${over.length ? lokList(over, x => x[meta.lokH] + ' · ' + x['Hari Sejak Maintenance'] + ' hr') : 'Semua pompa dirawat dalam 6 bulan terakhir'}</div></div>
