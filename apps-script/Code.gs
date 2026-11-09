@@ -38,7 +38,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 11, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 12, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | pump) atau ?action=ping' });
 }
@@ -295,7 +295,7 @@ function pump_(b) {
     if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_SUMBER + '" tidak ditemukan' });
     var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
     var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
-    var cKode = headers.indexOf('Kode Baru') + 1, cPompa = headers.indexOf('Pompa') + 1, cLok = headers.indexOf('Lokasi') + 1, cJenis = headers.indexOf('Jenis Sumber Air') + 1, cStatus = headers.indexOf('Status') + 1, cUpd = headers.indexOf('Update') + 1;
+    var cKode = headers.indexOf('Kode Baru') + 1, cPompa = headers.indexOf('Pompa') + 1, cLok = headers.indexOf('Lokasi') + 1, cJenis = headers.indexOf('Jenis Sumber Air') + 1, cStatus = headers.indexOf('Status') + 1, cUpd = headers.indexOf('Update') + 1, cKet = headers.indexOf('Keterangan') + 1;
     if (!cKode || !cPompa) return out_({ ok: false, error: 'Kolom "Kode Baru" / "Pompa" tidak ada di header sheet Sumber Air' });
     var changes = Array.isArray(b.changes) ? b.changes : [];
     if (!changes.length) return out_({ ok: false, error: 'Tidak ada perubahan' });
@@ -311,10 +311,26 @@ function pump_(b) {
       if (ch.expect !== undefined && ch.expect !== null && String(ch.expect).trim() !== cur) return out_({ ok: false, error: 'Data ' + kode + ' sudah berubah (Pompa sekarang "' + (cur || 'kosong') + '"). Refresh dashboard lalu ulangi.' });
       plan.push({ kode: kode, row: row, from: cur, to: val, lokasi: cLok ? sh.getRange(row, cLok).getDisplayValue() : '', jenis: cJenis ? sh.getRange(row, cJenis).getDisplayValue() : '' });
     }
+    // riwayat di kolom "Keterangan" sheet Sumber Air (seperti Pindah Engine): [keterangan baru | riwayat | keterangan lama]
+    var stamp = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy'), who = b.user ? ' (' + b.user + ')' : '';
+    var userNote = String(b.keterangan || '').trim();
+    var src = plan.filter(function (x) { return /ada/i.test(x.from) && !/ada/i.test(x.to); })[0];   // sumur asal (pompa diambil)
+    var dst = plan.filter(function (x) { return !/ada/i.test(x.from) && /ada/i.test(x.to); })[0];   // sumur tujuan (pompa dipasang)
     var results = [];
     for (var j = 0; j < plan.length; j++) {
       var p = plan[j]; sh.getRange(p.row, cPompa).setValue(p.to);
-      results.push({ kode: p.kode, row: p.row, from: p.from, to: p.to, lokasi: p.lokasi });
+      var hist;
+      if (plan.length > 1 && p === src && dst) hist = 'Pompa dipindah ke ' + dst.kode + (dst.lokasi ? ' (' + dst.lokasi + ')' : '') + ' ' + stamp + who + (p.to !== 'Kosong' ? ' → ' + p.to : '');
+      else if (plan.length > 1 && p === dst && src) hist = 'Pompa dipindah dari ' + src.kode + (src.lokasi ? ' (' + src.lokasi + ')' : '') + ' ' + stamp + who;
+      else hist = 'Pompa: ' + (p.from || 'kosong') + ' → ' + p.to + ' ' + stamp + who;
+      p.hist = hist;
+      if (cKet) {
+        var oldKet = String(sh.getRange(p.row, cKet).getDisplayValue() || '').trim();
+        var ket = [userNote, hist, oldKet].filter(String).join(' | ');
+        if (ket.length > MAX_HISTORY) ket = ket.slice(0, MAX_HISTORY - 1) + '…';
+        sh.getRange(p.row, cKet).setValue(ket);
+      }
+      results.push({ kode: p.kode, row: p.row, from: p.from, to: p.to, lokasi: p.lokasi, hist: hist });
     }
     SpreadsheetApp.flush();
     for (var k = 0; k < results.length; k++) { var r = results[k]; r.status = cStatus ? sh.getRange(r.row, cStatus).getDisplayValue() : ''; r.update = cUpd ? sh.getRange(r.row, cUpd).getDisplayValue() : ''; }

@@ -19,7 +19,7 @@ window.APP_CONFIG = {
   // Pembacaan juga berhenti otomatis di header kosong pertama.
   sheets: {
     detail:    { name: 'Detail Terpasang', endHeader: 'Kode Air' },
-    sumber:    { name: 'Sumber Air',       endHeader: 'Status'   },
+    sumber:    { name: 'Sumber Air',       endHeader: 'Keterangan' }, // kolom Keterangan menyimpan riwayat pindah pompa
     sumur:     { name: 'Pompa Sumur',      endHeader: 'Grease (kg)', keyHeader: 'LOKASI' }, // catatan pompa sumur bor (maintenance & komponen) per lokasi
     mesin:     { name: 'Mesin',            endHeader: null, keyHeader: 'Kode Unit' }, // berhenti di header kosong pertama
     irrigator: { name: 'Irrigator',        endHeader: null, keyHeader: 'KODE UNIT' }, // berhenti di header kosong pertama (kolom inspeksi SKOR/KONDISI ikut terbaca)
