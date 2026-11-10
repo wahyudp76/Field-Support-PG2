@@ -96,8 +96,8 @@
       filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Pompa', 'Status', 'Tahun'],
       kpis: [
         { label: 'Total Sumber Air', icon: '🌊', c: '#38bdf8', fn: r => r.length },
-        { label: 'Lebung / Reservoir', icon: '🏞️', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length },
-        { label: 'Deep Well', icon: '🕳️', c: '#a78bfa', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /deep|sumur/i)).length },
+        { label: 'Lebung / Reservoir', icon: '🏞️', c: '#22c55e', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /reservoir|lebung/i)).length, sub: r => { const e = r.filter(x => /electric/i.test(x['Jenis Sumber Air'] || '') && /reservoir|lebung/i.test(x['Jenis Sumber Air'] || '')).length; return e ? e + ' electric' : ''; } },
+        { label: 'Deep Well', icon: '🕳️', c: '#a78bfa', fn: r => r.filter(x => isTrue(x['Jenis Sumber Air'], /deep|sumur/i)).length, sub: r => { const e = r.filter(x => /electric/i.test(x['Jenis Sumber Air'] || '') && /deep|sumur/i.test(x['Jenis Sumber Air'] || '')).length; return e ? e + ' electric' : ''; } },
         { label: 'Sumur Ada Pompa', icon: '🔄', c: '#0ea5e9', fn: r => r.filter(x => /ada/i.test(x['Pompa'] || '')).length, sub: r => { const k = r.filter(x => /kosong/i.test(x['Pompa'] || '')).length, d = r.filter(x => /rusak/i.test(x['Pompa'] || '')).length; return (k || d) ? k + ' kosong · ' + d + ' rusak' : ''; } },
         { label: 'Aktif Irigasi', icon: '✅', c: '#f59e0b', fn: r => r.filter(x => isTrue(x['Keterangan (Aktif Irigasi/Tidak)'], /aktif/i) && !isTrue(x['Keterangan (Aktif Irigasi/Tidak)'], /tidak|non/i)).length },
         { label: 'Sudah Diukur', icon: '📐', c: '#14b8a6', fn: r => r.filter(x => isTrue(x['Keterangan Ukur'], /^ukur/i)).length },
@@ -108,14 +108,14 @@
         { id: 'c1', title: 'Sumber Air per Wilayah', type: 'bar', key: 'Wilayah', limit: 30 },
         { id: 'c2', title: 'Jenis Sumber Air', type: 'doughnut', key: 'Jenis Sumber Air' },
         { id: 'c3', title: 'Status Pengukuran', type: 'doughnut', key: 'Keterangan Ukur', colors: { 'Ukur': '#38bdf8', 'Belum Ukur': '#f59e0b' } },
-        { id: 'c4', title: 'Status Operasional', type: 'doughnut', key: 'Status' },
+        { id: 'c4', title: 'Status Pompa Sumur Bor', type: 'doughnut', key: 'Status', exclude: /^lebung$/i, colors: { 'Siap Operasi': '#4b7a5e', 'Siap Standby': '#8aa58f', 'Kosong Standby': '#b08a4a', 'Kosong Operasi': '#a85d4a' } },
       ],
       chips: {
         'Keterangan (Aktif Irigasi/Tidak)': v => /tidak|non/i.test(v) ? 'chip-red' : 'chip-green',
         'Keterangan Ukur': v => /belum/i.test(v) ? 'chip-amber' : 'chip-blue',
         'Jenis Sumber Air': v => /deep|sumur/i.test(v) ? 'chip-purple' : 'chip-blue',
-        'Pompa': v => /ada/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
-        'Status': v => /siap/i.test(v) ? 'chip-green' : /kosong/i.test(v) ? 'chip-amber' : 'chip-gray',
+        'Pompa': v => /lebung/i.test(v) ? 'chip-gray' : /ada/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : 'chip-amber',
+        'Status': v => /lebung/i.test(v) ? 'chip-gray' : /operasi/i.test(v) ? 'chip-green' : /standby/i.test(v) ? 'chip-amber' : 'chip-gray',
         'Kondisi Sumur': v => /baik/i.test(v) ? 'chip-green' : /rusak/i.test(v) ? 'chip-red' : /perbaikan/i.test(v) ? 'chip-amber' : 'chip-gray'
       },
       numCols: ['Luas Badan Air', 'Volume Real Ukur (Overflow Terbuka)', 'Volume Potensi Maksimal (Overflow Terbuka)']
@@ -466,7 +466,7 @@
       const key = altKey(headers, c.key);
       if (!key) { noChart(k + '-' + c.id, c.key); return; }
       const all = count(rows, key), blank = all.find(x => x[0] === '(kosong)');
-      let e = all.filter(x => x[0] !== '(kosong)');
+      let e = all.filter(x => x[0] !== '(kosong)' && !(c.exclude && c.exclude.test(String(x[0]))));
       const note = $(k + '-' + c.id)?.closest('.card')?.querySelector('h3');
       if (note) { let sp = note.querySelector('.blank-note'); if (blank && e.length) { if (!sp) { sp = document.createElement('span'); sp.className = 'blank-note'; note.appendChild(sp); } sp.textContent = fmt(blank[1]) + ' belum diisi'; sp.title = 'Baris dengan kolom "' + key + '" kosong tidak ditampilkan di chart'; } else if (sp) sp.remove(); }
       if (c.type === 'line') e = e.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
