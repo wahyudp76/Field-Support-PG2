@@ -162,3 +162,6 @@ Parser tanggal juga mengenali tampilan `29-Mei-2026`, `29 Mei 2026`, `2026/05/29
 Pindah Pompa Sumur (v12) juga menulis riwayat ke kolom **Keterangan** sheet Sumber Air: sumur asal "Pompa dipindah ke <kode> (lokasi) dd/mm/yyyy", sumur tujuan "Pompa dipindah dari …"; keterangan lama dipertahankan di belakang (maks 400 karakter).
 
 <!-- deploy 1794248128 -->
+
+## Tukar Unit (engine / irigator)
+Di panel detail unit terpasang → **🔁 Tukar Unit**. Dua mode: *Tukar dengan lokasi lain yang terpasang* (kode unit kedua baris saling bertukar) dan *Ganti dengan unit standby* (unit lama kembali ke bengkel; status di sheet Mesin/Irrigator diperbarui). Hanya kolom Kode Engine/Kode Irigator yang berubah; riwayat ditulis ke Keterangan, Tanggal diisi tanggal tukar, dan tercatat di "Log Perpindahan". Membutuhkan Code.gs **v13** (aksi `swap`).

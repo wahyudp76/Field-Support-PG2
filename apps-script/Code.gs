@@ -1,7 +1,7 @@
 /**
  * =====================================================================
  *  Field Support Irigasi PG 2 — Web App penulis (Apps Script)
- *  Dipakai tombol "Pindah Unit", "Tarik ke Bengkel" dan "Pasang Unit" di
+ *  Dipakai tombol "Pindah Unit", "Tarik ke Bengkel", "Pasang Unit", "Tukar Unit" di
  *  dashboard untuk mengubah / menghapus / menambah baris pada sheet
  *  "Detail Terpasang" secara langsung.
  *
@@ -38,9 +38,9 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 12, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 13, time: new Date().toISOString(), info: info });
   }
-  return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | pump) atau ?action=ping' });
+  return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | swap | pump) atau ?action=ping' });
 }
 
 function doPost(e) {
@@ -56,6 +56,7 @@ function doPost(e) {
   if (body.action === 'move') return move_(body);
   if (body.action === 'withdraw') return withdraw_(body);
   if (body.action === 'install') return install_(body);
+  if (body.action === 'swap') return swap_(body);
   if (body.action === 'pump') return pump_(body);
   if (body.action === 'syncPompaSumur') return syncPompaSumur_(body);
   if (body.action === 'repairCells') return repairCells_(body);
@@ -278,6 +279,111 @@ function install_(b) {
     log_(ss, [new Date(), b.user || '', row, eng, irr, 'PASANG BARU', '', '', lokasi, wil, rowObj['Kode Air'] || '', rowObj['Sumber Air'] || '',
       String(m.keterangan || '') + (upd.mesin ? ' | Mesin → ' + upd.mesin : '') + (upd.irrigator ? ' | Irrigator → ' + upd.irrigator : '')]);
     return out_({ ok: true, row: row, placed: placed, afterRow: ref, rowData: rowObj, modes: modes, status: upd, noFixed: noFix });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message || err) });
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- tukar / ganti engine atau irigator pada lokasi yang sudah terpasang ----------
+ * body.kind  : 'engine' | 'irrigator'  (kolom "Kode Engine" / "Kode Irigator")
+ * body.mode  : 'swap'    → unit di baris A bertukar dengan unit di baris B (keduanya terpasang)
+ *              'replace' → unit di baris A diganti body.newKode (unit standby); unit lama kembali ke bengkel
+ * body.a / body.b : {row, lokasi, kodeEngine, kodeIrigator} (verifikasi isi baris seperti move_)
+ * body.tanggal 'yyyy-mm-dd', body.keterangan, body.statusOld / body.statusNew (kolom Status di sheet Mesin/Irrigator)
+ * body.derived : {a:{'Jenis Engine':..,'Power':..}, b:{...}} → hanya ditulis bila sel tsb TIDAK berumus
+ * Riwayat ditambahkan ke kolom Keterangan tiap baris; dicatat juga di "Log Perpindahan".
+ */
+function swap_(b) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return out_({ ok: false, error: 'Sheet sedang dipakai proses lain, coba lagi' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID), sh = ss.getSheetByName(SHEET_DETAIL);
+    if (!sh) return out_({ ok: false, error: 'Sheet "' + SHEET_DETAIL + '" tidak ditemukan' });
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var col = function (name) { var i = headers.indexOf(name); if (i < 0) throw new Error('Kolom "' + name + '" tidak ada di header'); return i + 1; };
+    var cLok = col('Lokasi'), cWil = col('Wil'), cEng = col('Kode Engine'), cIrr = col('Kode Irigator'), cKet = col('Keterangan'), cTgl = col('Tanggal'), cKA = col('Kode Air');
+    var isIrr = b.kind === 'irrigator', cUnit = isIrr ? cIrr : cEng, label = isIrr ? 'irigator' : 'engine';
+    var mode = b.mode === 'replace' ? 'replace' : 'swap';
+
+    var all = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    var same = function (v, f) {
+      return String(v[cLok - 1]).trim() === String(f.lokasi || '').trim() && String(v[cEng - 1]).trim() === String(f.kodeEngine || '').trim() && String(v[cIrr - 1]).trim() === String(f.kodeIrigator || '').trim();
+    };
+    var findRow = function (f, nm) {
+      var row = Number(f && f.row) || 0;
+      if (row >= 2 && row <= lastRow && same(all[row - 2], f)) return row;
+      row = 0;
+      for (var i = 0; i < all.length; i++) if (same(all[i], f)) { if (row) throw new Error('Ada lebih dari satu baris yang cocok untuk ' + nm + ' (' + f.lokasi + ') — rapikan baris ganda dulu'); row = i + 2; }
+      if (!row) throw new Error('Baris ' + nm + ' (' + (f && f.lokasi) + ') tidak ditemukan — mungkin sudah diubah orang lain. Refresh dashboard lalu ulangi.');
+      return row;
+    };
+    var rowA = findRow(b.a, 'lokasi A'), rowB = 0;
+    var oldA = all[rowA - 2].slice(), kodeA = String(oldA[cUnit - 1]).trim(), lokA = String(oldA[cLok - 1]).trim();
+    var kodeB = '', lokB = '', oldB = null;
+    if (mode === 'swap') {
+      rowB = findRow(b.b, 'lokasi B');
+      if (rowB === rowA) return out_({ ok: false, error: 'Lokasi A dan B sama' });
+      oldB = all[rowB - 2].slice(); kodeB = String(oldB[cUnit - 1]).trim(); lokB = String(oldB[cLok - 1]).trim();
+      if (!kodeA && !kodeB) return out_({ ok: false, error: 'Kedua baris tidak punya kode ' + label });
+    } else {
+      kodeB = String(b.newKode || '').trim().toUpperCase();
+      if (!kodeB) return out_({ ok: false, error: 'Kode ' + label + ' pengganti kosong' });
+      if (kodeB === kodeA) return out_({ ok: false, error: 'Kode pengganti sama dengan kode sekarang' });
+      for (var k = 0; k < all.length; k++) if (String(all[k][cUnit - 1]).trim().toUpperCase() === kodeB) return out_({ ok: false, error: 'Kode ' + kodeB + ' masih terpasang di ' + all[k][cLok - 1] + ' (baris ' + (k + 2) + '). Gunakan mode Tukar antar lokasi.' });
+    }
+
+    var tgl = null;
+    if (b.tanggal && /^\d{4}-\d{2}-\d{2}$/.test(b.tanggal)) { var p = b.tanggal.split('-'); tgl = new Date(+p[0], +p[1] - 1, +p[2]); }
+    var stamp = Utilities.formatDate(tgl || new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy');
+    var note = String(b.keterangan || '').trim();
+    var addKet = function (row, oldKet, hist) {
+      var ket = [note, hist, String(oldKet || '').trim()].filter(String).join(' | ');
+      if (ket.length > MAX_HISTORY) ket = ket.slice(0, MAX_HISTORY - 1) + '…';
+      sh.getRange(row, cKet).setValue(ket); return ket;
+    };
+    var writeDerived = function (row, d) {
+      if (!d) return;
+      Object.keys(d).forEach(function (h) {
+        var c = headers.indexOf(h) + 1; if (!c || c === cUnit) return;
+        var cell = sh.getRange(row, c); if (cell.getFormula()) return;
+        cell.setValue(String(d[h] || '').trim());
+      });
+    };
+    var derived = b.derived || {};
+    var cap = label.charAt(0).toUpperCase() + label.slice(1);
+
+    sh.getRange(rowA, cUnit).setValue(kodeB);
+    if (tgl) sh.getRange(rowA, cTgl).setValue(tgl);
+    var ketA = addKet(rowA, oldA[cKet - 1], mode === 'swap'
+      ? 'Tukar ' + label + ' ' + (kodeA || '–') + ' → ' + (kodeB || '–') + ' (dengan ' + lokB + ') ' + stamp
+      : 'Ganti ' + label + ' ' + (kodeA || '–') + ' → ' + kodeB + ' ' + stamp);
+    writeDerived(rowA, derived.a);
+
+    var ketB = '';
+    if (mode === 'swap') {
+      sh.getRange(rowB, cUnit).setValue(kodeA);
+      if (tgl) sh.getRange(rowB, cTgl).setValue(tgl);
+      ketB = addKet(rowB, oldB[cKet - 1], 'Tukar ' + label + ' ' + (kodeB || '–') + ' → ' + (kodeA || '–') + ' (dengan ' + lokA + ') ' + stamp);
+      writeDerived(rowB, derived.b);
+    }
+
+    // status unit di sheet Mesin / Irrigator (hanya mode ganti)
+    var upd = { old: '', neu: '' }, shName = isIrr ? SHEET_IRR : SHEET_MESIN, keyH = isIrr ? 'KODE UNIT' : 'Kode Unit';
+    if (mode === 'replace') {
+      if (b.statusOld && kodeA) upd.old = setStatus_(ss, shName, keyH, kodeA, String(b.statusOld));
+      if (b.statusNew && kodeB) upd.neu = setStatus_(ss, shName, keyH, kodeB, String(b.statusNew));
+    }
+
+    var tag = mode === 'swap' ? 'TUKAR ' + cap.toUpperCase() : 'GANTI ' + cap.toUpperCase();
+    var engA = isIrr ? oldA[cEng - 1] : kodeB, irrA = isIrr ? kodeB : oldA[cIrr - 1];
+    log_(ss, [new Date(), b.user || '', rowA, engA, irrA, lokA, oldA[cWil - 1], oldA[cKA - 1], lokA + ' (' + tag + ')', oldA[cWil - 1], oldA[cKA - 1], '', cap + ' ' + (kodeA || '–') + ' → ' + (kodeB || '–') + (note ? ' | ' + note : '') + (upd.old ? ' | ' + kodeA + ' → ' + upd.old : '') + (upd.neu ? ' | ' + kodeB + ' → ' + upd.neu : '')]);
+    if (mode === 'swap') {
+      var engB = isIrr ? oldB[cEng - 1] : kodeA, irrB = isIrr ? kodeA : oldB[cIrr - 1];
+      log_(ss, [new Date(), b.user || '', rowB, engB, irrB, lokB, oldB[cWil - 1], oldB[cKA - 1], lokB + ' (' + tag + ')', oldB[cWil - 1], oldB[cKA - 1], '', cap + ' ' + (kodeB || '–') + ' → ' + (kodeA || '–') + (note ? ' | ' + note : '')]);
+    }
+    SpreadsheetApp.flush();
+    return out_({ ok: true, mode: mode, kind: b.kind, rowA: rowA, rowB: rowB, kodeA: kodeB, kodeB: mode === 'swap' ? kodeA : '', ketA: ketA, ketB: ketB, status: upd });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   } finally { lock.releaseLock(); }

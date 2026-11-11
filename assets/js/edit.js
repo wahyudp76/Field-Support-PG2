@@ -139,11 +139,11 @@
         <div class="wide edit-sug" id="ed-sug"><div class="empty">Ketik lokasi baru untuk melihat rekomendasi sumber air.</div></div>
         <label>PIN <input id="ed-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
         <label>Nama pengisi <input id="ed-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
-        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ed-setup">⚙ Atur URL Web App</button><button type="button" class="btn btn-danger" id="ed-withdraw">🔧 Tarik ke Bengkel</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ed-cancel">Batal</button><button type="submit" class="btn btn-primary" id="ed-save">💾 Simpan Perpindahan</button></div>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="ed-setup">⚙ Atur URL Web App</button><button type="button" class="btn btn-outline" id="ed-swap">🔁 Tukar Unit</button><button type="button" class="btn btn-danger" id="ed-withdraw">🔧 Tarik ke Bengkel</button><span class="grow"></span><button type="button" class="btn btn-outline" id="ed-cancel">Batal</button><button type="submit" class="btn btn-primary" id="ed-save">💾 Simpan Perpindahan</button></div>
         <div class="wide edit-msg" id="ed-msg"></div>
       </form>`;
     $('editModal').classList.add('show');
-    $('ed-cancel').onclick = close; $('ed-setup').onclick = () => setup(() => open(rowIndex)); $('ed-withdraw').onclick = () => withdraw(r);
+    $('ed-cancel').onclick = close; $('ed-setup').onclick = () => setup(() => open(rowIndex)); $('ed-withdraw').onclick = () => withdraw(r); $('ed-swap').onclick = () => swap(rowIndex);
     let t; const upd = () => { clearTimeout(t); t = setTimeout(() => renderSug(r), 180); };
     const wilSync = () => syncWil('ed-lok', 'ed-wil', 'ed-lok-i');
     $('ed-lok').oninput = () => { wilSync(); upd(); }; $('ed-wil').onchange = upd;
@@ -249,6 +249,133 @@
         setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1200);
       } catch (err) {
         msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (err.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : err.message); btn.disabled = false;
+      }
+    };
+  }
+
+  /* ---------- tukar / ganti engine atau irigator pada lokasi terpasang ---------- */
+  function swap(rowIndex) {
+    ensureModal();
+    const D = F().RAW && F().RAW.detail; if (!D || D.error) return toast('Data Detail Terpasang belum siap', true);
+    const r = D.rows.find(x => x._i === rowIndex); if (!r) return;
+    if (!apiUrl()) return setup(() => swap(rowIndex));
+    const R = F().RAW, mesin = R.mesin && !R.mesin.error ? R.mesin.rows : [], irr = R.irrigator && !R.irrigator.error ? R.irrigator.rows : [];
+    const up = v => String(v || '').trim().toUpperCase();
+    const optE = mesin.map(x => ({ k: up(x['Kode Unit']), st: String(x['Status'] || '').trim(), p: x['Power'] || '', sp: x['Spec'] || '', asal: String(x['Asal Mesin'] || '').trim() })).filter(x => x.k).sort((a, b) => a.k.localeCompare(b.k));
+    const optI = irr.map(x => ({ k: up(x['KODE UNIT']), st: String(x['Status'] || '').trim(), w: String(x['WILAYAH'] || '').trim() })).filter(x => x.k).sort((a, b) => a.k.localeCompare(b.k));
+    const usedE = new Set(D.rows.map(x => up(x['Kode Engine'])).filter(Boolean)), usedI = new Set(D.rows.map(x => up(x['Kode Irigator'])).filter(Boolean));
+    const isStandby = st => /^standby$/i.test(st);
+    const today = new Date(), iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const stOld = ['Standby', 'Rusak', 'Perbaikan', ''], stNew = ['Terpasang', ''];
+    const rowLabel = x => up(x['Lokasi']) + ' · ' + (x['Wil'] || '') + ' · E: ' + (x['Kode Engine'] || '–') + ' · I: ' + (x['Kode Irigator'] || '–');
+    const idOf = x => String(x._row || x._i + 2);
+
+    $('editTitle').textContent = '🔁 Tukar Unit — ' + up(r['Lokasi']);
+    $('editBody').innerHTML = `
+      <div class="edit-cur"><b>Lokasi A (sekarang)</b>
+        <div class="edit-grid4"><div><span>Lokasi</span>${esc(r['Lokasi'])}</div><div><span>Wil</span>${esc(r['Wil'])}</div><div><span>Engine</span>${esc(r['Kode Engine'] || '–')}</div><div><span>Irigator</span>${esc(r['Kode Irigator'] || '–')}</div></div>
+        ${r['Keterangan'] ? `<div class="edit-ket">📝 ${esc(r['Keterangan'])}</div>` : ''}
+        <div class="edit-ket">Hanya kolom <b>Kode Engine</b> / <b>Kode Irigator</b> yang ditukar — Lokasi, Wil, Sumber Air, Kode Air tiap baris tetap. Riwayat ditambahkan ke <b>Keterangan</b>, <b>Tanggal</b> diisi tanggal tukar, dan dicatat di sheet <b>Log Perpindahan</b>.</div></div>
+      <form id="swForm" class="edit-form" autocomplete="off">
+        <label>Unit yang ditukar <select id="sw-kind"><option value="engine" ${r['Kode Engine'] ? 'selected' : ''}>Engine (${esc(r['Kode Engine'] || 'kosong')})</option><option value="irrigator" ${!r['Kode Engine'] && r['Kode Irigator'] ? 'selected' : ''}>Irigator (${esc(r['Kode Irigator'] || 'kosong')})</option></select></label>
+        <label>Mode <select id="sw-mode"><option value="swap">Tukar dengan lokasi lain yang terpasang</option><option value="replace">Ganti dengan unit standby (unit lama ke bengkel)</option></select></label>
+        <label class="wide" id="sw-b-wrap">Lokasi B (lawan tukar) <input id="sw-b" list="sw-b-l" placeholder="ketik lokasi / kode unit…" required><datalist id="sw-b-l"></datalist><small class="edit-hint" id="sw-b-i"></small></label>
+        <div class="wide" id="sw-new-wrap" style="display:none">
+          <div class="edit-form" style="padding:0">
+            <label>Unit pengganti <span class="edit-cnt" id="sw-new-cnt"></span><select id="sw-new"></select><input id="sw-new-m" placeholder="ketik kode unit" style="display:none"><small class="edit-hint" id="sw-new-i"></small></label>
+            <label>Status unit lama di sheet <span id="sw-sheet-old">Mesin</span> <select id="sw-st-old">${stOld.map(o => `<option value="${o}">${o || '(tidak diubah)'}</option>`).join('')}</select></label>
+            <label>Status unit baru di sheet <span id="sw-sheet-new">Mesin</span> <select id="sw-st-new">${stNew.map(o => `<option value="${o}">${o || '(tidak diubah)'}</option>`).join('')}</select></label>
+          </div>
+        </div>
+        <label>Tanggal tukar <input id="sw-tgl" type="date" value="${iso}"></label>
+        <label>Keterangan (opsional) <input id="sw-ket" placeholder="alasan tukar / ganti"></label>
+        <div class="wide edit-sug" id="sw-prev"></div>
+        <label>PIN <input id="sw-pin" type="password" inputmode="numeric" placeholder="PIN" value="${esc(localStorage.getItem(LS_PIN) || '')}"></label>
+        <label>Nama pengisi <input id="sw-user" placeholder="opsional" value="${esc(localStorage.getItem(LS_USER) || '')}"></label>
+        <div class="wide edit-actions"><button type="button" class="btn btn-outline" id="sw-back">← Kembali</button><span class="grow"></span><button type="button" class="btn btn-outline" id="sw-cancel">Batal</button><button type="submit" class="btn btn-primary" id="sw-save">🔁 Simpan Tukar</button></div>
+        <div class="wide edit-msg" id="sw-msg"></div>
+      </form>`;
+    $('editModal').classList.add('show');
+    $('sw-back').onclick = () => open(rowIndex); $('sw-cancel').onclick = close;
+
+    const kind = () => $('sw-kind').value, isIrr = () => kind() === 'irrigator', colName = () => isIrr() ? 'Kode Irigator' : 'Kode Engine';
+    const curKode = () => up(r[colName()]);
+    // kandidat lokasi B: baris lain yang punya kode unit jenis tsb (atau kosong — boleh menerima unit)
+    const candB = () => D.rows.filter(x => x !== r).sort((a, b) => up(a['Lokasi']).localeCompare(up(b['Lokasi']), 'id', { numeric: true }));
+    const findB = () => { const q = up($('sw-b').value); if (!q) return null; const c = candB(); return c.find(x => up(x['Lokasi']) === q) || c.find(x => up(x[colName()]) === q) || c.find(x => idOf(x) === q.replace(/^BARIS\s*/, '')) || null; };
+    function fillB() {
+      const c = candB(); $('sw-b-l').innerHTML = c.map(x => `<option value="${esc(up(x['Lokasi']))}">${esc(rowLabel(x))}</option>`).join('');
+      const b = findB(), el = $('sw-b-i');
+      if (!$('sw-b').value) { el.textContent = c.length + ' lokasi terpasang lain tersedia'; el.className = 'edit-hint'; }
+      else if (!b) { el.textContent = '⚠ lokasi tidak ditemukan di Detail Terpasang'; el.className = 'edit-hint warn'; }
+      else { el.textContent = '✓ ' + rowLabel(b) + (up(b[colName()]) ? '' : ' — (tanpa ' + colName().replace('Kode ', '').toLowerCase() + ': unit A akan pindah ke sana, A jadi kosong)'); el.className = 'edit-hint'; }
+    }
+    function fillNew() {
+      const list = isIrr() ? optI.filter(x => isStandby(x.st) && !usedI.has(x.k)) : optE.filter(x => isStandby(x.st) && !usedE.has(x.k));
+      $('sw-new-cnt').textContent = list.length + ' standby';
+      $('sw-new').innerHTML = `<option value="">— pilih unit standby —</option>` + list.map(x => `<option value="${esc(x.k)}">${esc(x.k + (x.p ? ' · ' + x.p + ' HP' : '') + (x.sp ? ' · ' + x.sp : '') + (x.asal ? ' · ' + x.asal : '') + (x.w ? ' · ' + x.w : ''))}</option>`).join('') + `<option value="__m">✏️ Ketik kode lain…</option>`;
+      $('sw-sheet-old').textContent = $('sw-sheet-new').textContent = isIrr() ? 'Irrigator' : 'Mesin';
+      newInfo();
+    }
+    const newVal = () => { const sel = $('sw-new'), inp = $('sw-new-m'); inp.style.display = sel.value === '__m' ? '' : 'none'; return up(sel.value === '__m' ? inp.value : sel.value); };
+    function newInfo() {
+      const k = newVal(), el = $('sw-new-i'); if (!k) { el.textContent = ''; return; }
+      const m = (isIrr() ? optI : optE).find(x => x.k === k), used = isIrr() ? usedI : usedE;
+      el.textContent = !m ? '⚠ kode tidak ada di sheet ' + (isIrr() ? 'Irrigator' : 'Mesin') : used.has(k) ? '⚠ sudah terpasang di ' + up((D.rows.find(x => up(x[colName()]) === k) || {})['Lokasi']) + ' — gunakan mode Tukar' : !isStandby(m.st) ? '⚠ status: ' + (m.st || 'kosong') + ' (bukan Standby)' : '✓ Standby' + (m.asal ? ' · ' + m.asal : '') + (m.w ? ' · ' + m.w : '');
+      el.className = /⚠/.test(el.textContent) ? 'edit-hint warn' : 'edit-hint';
+    }
+    function preview() {
+      const box = $('sw-prev'), mode = $('sw-mode').value, a = curKode() || '–';
+      if (mode === 'swap') { const b = findB(); if (!b) { box.innerHTML = ''; return; } const kb = up(b[colName()]) || '–';
+        box.innerHTML = `<div class="sug-h">🔁 Pratinjau</div><div class="sug-row"><div class="sug on"><b>${esc(up(r['Lokasi']))}</b><div>${esc(colName())}: ${esc(a)} → <b>${esc(kb)}</b></div></div><div class="sug on"><b>${esc(up(b['Lokasi']))}</b><div>${esc(colName())}: ${esc(kb)} → <b>${esc(a)}</b></div></div></div>`; }
+      else { const k = newVal(); box.innerHTML = k ? `<div class="sug-h">🔁 Pratinjau</div><div class="sug-row"><div class="sug on"><b>${esc(up(r['Lokasi']))}</b><div>${esc(colName())}: ${esc(a)} → <b>${esc(k)}</b></div><small>${esc(a)} kembali ke bengkel</small></div></div>` : ''; }
+    }
+    function modeSync() { const rep = $('sw-mode').value === 'replace'; $('sw-b-wrap').style.display = rep ? 'none' : ''; $('sw-new-wrap').style.display = rep ? '' : 'none'; $('sw-b').required = !rep; if (rep) fillNew(); else fillB(); preview(); }
+    $('sw-kind').onchange = modeSync; $('sw-mode').onchange = modeSync;
+    $('sw-b').oninput = () => { fillB(); preview(); };
+    $('sw-new').onchange = () => { newInfo(); preview(); if ($('sw-new').value === '__m') $('sw-new-m').focus(); }; $('sw-new-m').oninput = () => { newInfo(); preview(); };
+    modeSync();
+
+    const derivedFor = k => { if (isIrr()) return null; const m = optE.find(x => x.k === k); return { 'Jenis Engine': k ? k.replace(/\d+$/, '') : '', 'Power': m ? String(m.p || '') : '' }; };
+    $('swForm').onsubmit = async e => {
+      e.preventDefault();
+      const pin = $('sw-pin').value.trim(), msg = $('sw-msg'), btn = $('sw-save'), mode = $('sw-mode').value, a = curKode();
+      const err = m => { msg.textContent = m; msg.className = 'wide edit-msg err'; };
+      if (!pin) return err('PIN wajib diisi.');
+      const body = { action: 'swap', pin, user: $('sw-user').value.trim(), kind: kind(), mode, tanggal: $('sw-tgl').value, keterangan: $('sw-ket').value.trim(),
+        a: { row: (r._row || r._i + 2), lokasi: r['Lokasi'] || '', kodeEngine: r['Kode Engine'] || '', kodeIrigator: r['Kode Irigator'] || '' } };
+      let b = null, k = '';
+      if (mode === 'swap') {
+        b = findB(); if (!b) return err('Pilih lokasi B yang valid.');
+        k = up(b[colName()]);
+        if (!a && !k) return err('Kedua lokasi tidak punya ' + colName().toLowerCase() + ' — tidak ada yang bisa ditukar.');
+        if (a === k) return err('Kode unit di kedua lokasi sama.');
+        body.b = { row: (b._row || b._i + 2), lokasi: b['Lokasi'] || '', kodeEngine: b['Kode Engine'] || '', kodeIrigator: b['Kode Irigator'] || '' };
+        body.derived = { a: derivedFor(k), b: derivedFor(a) };
+        if (!confirm('Tukar ' + colName().toLowerCase() + ':\n• ' + up(r['Lokasi']) + ': ' + (a || '–') + ' → ' + (k || '–') + '\n• ' + up(b['Lokasi']) + ': ' + (k || '–') + ' → ' + (a || '–') + '\n\nLanjutkan?')) return;
+      } else {
+        k = newVal(); if (!k) return err('Pilih / ketik unit pengganti.');
+        if (k === a) return err('Unit pengganti sama dengan unit sekarang.');
+        if ((isIrr() ? usedI : usedE).has(k)) return err('Unit ' + k + ' masih terpasang di lokasi lain — gunakan mode Tukar antar lokasi.');
+        const m = (isIrr() ? optI : optE).find(x => x.k === k);
+        if (!m && !confirm('Kode "' + k + '" tidak ada di sheet ' + (isIrr() ? 'Irrigator' : 'Mesin') + '. Tetap simpan?')) return;
+        if (m && !isStandby(m.st) && !confirm('Unit ' + k + ' berstatus "' + (m.st || 'kosong') + '" (bukan Standby). Tetap pasang?')) return;
+        body.newKode = k; body.statusOld = a ? $('sw-st-old').value : ''; body.statusNew = $('sw-st-new').value; body.derived = { a: derivedFor(k) };
+      }
+      btn.disabled = true; msg.className = 'wide edit-msg'; msg.textContent = 'Menyimpan ke spreadsheet…';
+      try {
+        const j = await post(body);
+        if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
+        localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('sw-user').value.trim());
+        r[colName()] = k; if (j.ketA) r['Keterangan'] = j.ketA; if ($('sw-tgl').value) r['Tanggal'] = $('sw-tgl').value;
+        if (F().refreshRow) F().refreshRow('detail', r);
+        if (b) { b[colName()] = a; if (j.ketB) b['Keterangan'] = j.ketB; if ($('sw-tgl').value) b['Tanggal'] = $('sw-tgl').value; if (F().refreshRow) F().refreshRow('detail', b); }
+        const st = j.status ? [j.status.old ? a + ' → ' + j.status.old : '', j.status.neu ? k + ' → ' + j.status.neu : ''].filter(Boolean).join(', ') : '';
+        msg.className = 'wide edit-msg ok'; msg.textContent = '✔ Tersimpan (baris ' + j.rowA + (j.rowB ? ' & ' + j.rowB : '') + ')' + (st ? ' · ' + st : '') + '. Menyinkronkan ulang…';
+        toast((mode === 'swap' ? 'Tukar ' : 'Ganti ') + colName().toLowerCase() + ' di ' + up(r['Lokasi']) + ' ✔');
+        setTimeout(() => { close(); F().loadData && F().loadData(false); }, 1500);
+      } catch (ex) {
+        msg.className = 'wide edit-msg err'; msg.textContent = '✖ ' + (ex.name === 'AbortError' ? 'Waktu habis (30 dtk) — periksa koneksi / URL Web App' : ex.message); btn.disabled = false;
       }
     };
   }
@@ -571,5 +698,5 @@
     };
   }
 
-  window.FSEdit = { open, install, pump, syncSumur, repairAll, setup, suggest, enabled: () => true, apiUrl };
+  window.FSEdit = { open, install, swap, pump, syncSumur, repairAll, setup, suggest, enabled: () => true, apiUrl };
 })();
