@@ -232,17 +232,18 @@
   function loadCache() {
     try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); if (!c || !c.sheets || Date.now() - c.at > 7 * 864e5) return null; return c; } catch (e) { return null; }
   }
-  // sinkron otomatis DITUNDA selama kartu tulis-balik (Pindah Unit / Pasang Unit / Tarik ke Bengkel / Pompa) sedang terbuka
+  // Sinkron otomatis NONAKTIF (autoRefreshMs = 0): data dimuat saat halaman dibuka/reload dan saat tombol Sync ditekan.
+  // scheduleAuto hanya dipakai bila autoRefreshMs > 0; saat aktif pun ditunda selama kartu tulis-balik terbuka.
   const editOpen = () => { const m = document.getElementById('editModal'); return !!(m && m.classList.contains('show')); };
   function scheduleAuto(ms) {
-    clearTimeout(timer);
+    clearTimeout(timer); if (!APP_CONFIG.autoRefreshMs) return;
     timer = setTimeout(() => {
       if (editOpen()) { $('syncInfo').textContent = 'Sinkron otomatis ditunda (form terbuka)'; scheduleAuto(30000); return; }
       loadData(false);
     }, ms);
   }
   window.loadData = async function (manual) {
-    if (!manual && editOpen()) { scheduleAuto(30000); return; }
+    if (!manual && editOpen() && APP_CONFIG.autoRefreshMs) { scheduleAuto(30000); return; }
     if (loading) return; loading = true;
     const btn = $('refreshBtn'); btn.disabled = true; $('syncInfo').textContent = window.__fromCache ? $('syncInfo').textContent : 'Sinkron…'; $('syncDot').className = 'dot'; window.__fromCache = false;
     try {
@@ -250,6 +251,7 @@
       onData(d);
       if (!onData.failed) saveCache(d);
       if (manual && !onData.failed) toast('Data berhasil disinkronkan ✔');
+      if (!APP_CONFIG.autoRefreshMs && !onData.failed) { const b = $('refreshBtn'); if (b) b.title = 'Sinkron manual — tidak ada sinkron otomatis. Terakhir: ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }); }
     } catch (e) {
       $('syncDot').className = 'dot err'; $('syncInfo').textContent = 'Gagal sinkron';
       toast('Gagal memuat data: ' + e.message, true);
@@ -1278,7 +1280,7 @@
   if (cached) {
     try {
       onData({ generatedAt: new Date(cached.at), sheets: cached.sheets });
-      $('syncInfo').textContent = 'Data tersimpan ' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' — menyinkronkan…';
+      $('syncInfo').textContent = 'Data tersimpan ' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' — memuat dari spreadsheet…';
       $('loader').classList.add('hide'); switchTab(h0 || 'overview'); window.__fromCache = true;
     } catch (e) { console.warn('cache rusak', e); localStorage.removeItem(CACHE_KEY); }
   }

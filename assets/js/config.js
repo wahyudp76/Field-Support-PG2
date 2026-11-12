@@ -12,7 +12,7 @@ window.APP_CONFIG = {
   },
 
   // Auto refresh (ms). 0 = nonaktif
-  autoRefreshMs: 5 * 60 * 1000,
+  autoRefreshMs: 0, // 0 = TANPA sinkron otomatis: data hanya dimuat saat halaman dibuka/reload dan saat tombol Sync ditekan
   pageSize: 25,
 
   // Kolom terakhir tiap sheet → tabel pivot / catatan di kanan diabaikan.

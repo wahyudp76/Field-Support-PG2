@@ -15,7 +15,7 @@ Dashboard web interaktif untuk memonitor operasional irigasi PG 2. Data dibaca *
 | ⚙️ Mesin | Inventaris engine + kondisi komponen (A/B/C), komponen paling sering bermasalah |
 | 💦 Irrigator | Inventaris irrigator + kondisi komponen, status terpasang / rusak |
 
-Setiap tab: filter dropdown per kolom kunci, pencarian global, sort klik header, pagination, klik baris → detail lengkap, export CSV (hasil filter), tema gelap/terang, auto-refresh 5 menit, badge & chip berwarna.
+Setiap tab: filter dropdown per kolom kunci, pencarian global, sort klik header, pagination, klik baris → detail lengkap, export CSV (hasil filter), tema gelap/terang, sinkron manual lewat tombol Sync (tanpa auto-refresh), badge & chip berwarna.
 
 ## PWA (Installable)
 
@@ -49,7 +49,7 @@ Dashboard memanggil endpoint CSV publik Google Sheets:
 ```
 https://docs.google.com/spreadsheets/d/<ID>/gviz/tq?tqx=out:csv&sheet=<Nama Sheet>
 ```
-Syarat: spreadsheet dibagikan **"Anyone with the link → Viewer"**. Setiap perubahan di spreadsheet langsung tampil setelah refresh (atau auto-refresh 5 menit).
+Syarat: spreadsheet dibagikan **"Anyone with the link → Viewer"**. Setiap perubahan di spreadsheet langsung tampil setelah refresh (atau sinkron manual lewat tombol Sync (tanpa auto-refresh)).
 
 Sheet yang dibaca: `Detail Terpasang`, `Sumber Air`, `Mesin`, `Irrigator`.
 Pembacaan kolom berhenti pada header kosong pertama atau kolom terakhir yang ditentukan di `config.js` (`endHeader`), sehingga tabel pivot/catatan di sebelah kanan data **tidak ikut terbaca**.
