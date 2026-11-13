@@ -64,6 +64,8 @@
     detail: {
       title: 'Detail Unit Terpasang', icon: '🚜',
       freezeUntil: 'Wil',
+      // filter bawaan: wilayah AW08–AW15 (BANANA & GUAVA tidak termasuk; tetap bisa dipilih di dropdown Wil / klik ✕ chip)
+      defaultFilters: { Wil: ['AW08', 'AW09', 'AW10', 'AW11', 'AW12', 'AW13', 'AW14', 'AW15'] },
       filters: ['Wil', 'Bengkel', 'Jenis Engine', 'Sumber Air', 'Terpasang', 'Power', 'Tanggal'],
       kpis: [
         { label: 'Total Unit', icon: '🚜', c: '#f59e0b', fn: r => r.length },
@@ -470,7 +472,7 @@
       ? [...set].forEach(v => af.push(`<span class="chip chip-blue" data-f="${esc(f)}" data-v="${esc(v)}" title="Hapus">${esc(f)}: <b>${esc(v)}</b> ✕</span>`))
       : af.push(`<span class="chip chip-blue" data-f="${esc(f)}" title="Hapus semua">${esc(f)}: <b>${set.size} nilai</b> ✕</span>`)));
     if (s.search) af.push(`<span class="chip chip-purple">🔍 "${esc(s.search)}"</span>`);
-    if (CONFIG[k].defaultFilters && af.length) af.push(`<span class="chip chip-gray" title="Filter bawaan tab ini: ${esc(Object.entries(CONFIG[k].defaultFilters).map(([f, v]) => f + ' = ' + v.join('/')).join(' · '))}. Klik ✕ pada chip untuk melihat semua PG; tombol Reset mengembalikan ke bawaan">ⓘ bawaan: PG2</span>`);
+    if (CONFIG[k].defaultFilters && af.length) af.push(`<span class="chip chip-gray" title="Filter bawaan tab ini: ${esc(Object.entries(CONFIG[k].defaultFilters).map(([f, v]) => f + ' = ' + v.join('/')).join(' · '))}. Klik ✕ pada chip untuk melihat semua PG; tombol Reset mengembalikan ke bawaan">ⓘ bawaan: ${esc(Object.entries(CONFIG[k].defaultFilters).map(([f, v]) => v.length > 3 ? f + ' ' + v[0] + '–' + v[v.length - 1] : v.join('/')).join(' · '))}</span>`);
     $(k + '-af').innerHTML = af.join('');
 
     requestAnimationFrame(() => cfg.charts.forEach(c => {
