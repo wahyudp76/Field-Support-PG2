@@ -30,6 +30,7 @@ var SHEET_DETAIL = 'Detail Terpasang';
 var SHEET_LOG = 'Log Perpindahan';      // dibuat otomatis bila belum ada
 var SHEET_MESIN = 'Mesin', SHEET_IRR = 'Irrigator';
 var SHEET_SUMBER = 'Sumber Air', SHEET_LOG_POMPA = 'Log Pompa Sumur', SHEET_POMPA_SUMUR = 'Pompa Sumur', SHEET_POMPA_ARSIP = 'Pompa Sumur (Arsip)'; // kolom "Pompa" di sheet Sumber Air
+var SHEET_LOG_REPAIR = 'Log Perbaikan Format'; // log tombol "Perbaikan format" (dibuat otomatis)
 var MAX_HISTORY = 400;                  // panjang maksimal kolom Keterangan
 
 function doGet(e) {
@@ -38,7 +39,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 13, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 14, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | swap | pump) atau ?action=ping' });
 }

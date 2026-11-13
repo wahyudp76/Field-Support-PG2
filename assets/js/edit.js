@@ -687,7 +687,7 @@
       try {
         const j = await post({ action: 'repairCells', pin, user: $('ra-user').value.trim(), items: sel.map(x => ({ sheet: x.sheet, row: x.row, col: x.col, kind: x.fix.kind, value: x.fix.value })) });
         if (!j.ok) { if (j.code === 'PIN') localStorage.removeItem(LS_PIN); throw new Error(j.error || 'Gagal'); }
-        if (!('fixed' in j)) throw new Error('Web App masih versi lama (belum ada aksi repairCells). Salin ulang Code.gs v11 lalu deploy versi baru.');
+        if (!('fixed' in j)) throw new Error('Web App masih versi lama (belum ada aksi repairCells). Salin ulang Code.gs terbaru (v14) lalu deploy versi baru.');
         localStorage.setItem(LS_PIN, pin); localStorage.setItem(LS_USER, $('ra-user').value.trim());
         msg.className = 'wide edit-msg ok'; msg.textContent = '✔ ' + (j.fixed || []).length + ' sel diperbaiki' + ((j.skipped || []).length ? ' · dilewati ' + j.skipped.length + ': ' + j.skipped.slice(0, 8).map(x => x.sheet + '!' + x.row + ' ' + x.col + ' (' + x.reason + ')').join('; ') + (j.skipped.length > 8 ? ' …' : '') : '') + '. Menyinkronkan ulang…';
         toast((j.fixed || []).length + ' sel diperbaiki ✔');

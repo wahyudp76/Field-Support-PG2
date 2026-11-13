@@ -164,4 +164,4 @@ Pindah Pompa Sumur (v12) juga menulis riwayat ke kolom **Keterangan** sheet Sumb
 <!-- deploy 1794248128 -->
 
 ## Tukar Unit (engine / irigator)
-Di panel detail unit terpasang → **🔁 Tukar Unit**. Dua mode: *Tukar dengan lokasi lain yang terpasang* (kode unit kedua baris saling bertukar) dan *Ganti dengan unit standby* (unit lama kembali ke bengkel; status di sheet Mesin/Irrigator diperbarui). Hanya kolom Kode Engine/Kode Irigator yang berubah; riwayat ditulis ke Keterangan, Tanggal diisi tanggal tukar, dan tercatat di "Log Perpindahan". Membutuhkan Code.gs **v13** (aksi `swap`).
+Di panel detail unit terpasang → **🔁 Tukar Unit**. Dua mode: *Tukar dengan lokasi lain yang terpasang* (kode unit kedua baris saling bertukar) dan *Ganti dengan unit standby* (unit lama kembali ke bengkel; status di sheet Mesin/Irrigator diperbarui). Hanya kolom Kode Engine/Kode Irigator yang berubah; riwayat ditulis ke Keterangan, Tanggal diisi tanggal tukar, dan tercatat di "Log Perpindahan". Membutuhkan Code.gs **v14** (aksi `swap`; v14 juga memperbaiki error `SHEET_LOG_REPAIR is not defined` pada Perbaikan format).
