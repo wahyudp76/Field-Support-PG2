@@ -242,6 +242,17 @@
       loadData(false);
     }, ms);
   }
+  // Penanda umur data: tanpa auto-sync, ingatkan pengguna bila data sudah lama (>30 mnt) agar menekan Sync
+  let lastSyncAt = 0;
+  function tickAge() {
+    if (!lastSyncAt || loading) return;
+    const m = Math.round((Date.now() - lastSyncAt) / 60000), el = $('syncInfo'), dot = $('syncDot');
+    if (!el || /Gagal|Offline/.test(el.textContent)) return;
+    const t = new Date(lastSyncAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    el.textContent = 'Update ' + t + (m >= 1 ? ' · ' + (m < 60 ? m + ' mnt lalu' : Math.floor(m / 60) + ' jam lalu') : '');
+    if (!APP_CONFIG.autoRefreshMs) { dot.className = m >= 30 ? 'dot stale' : 'dot'; el.title = m >= 30 ? 'Data sudah ' + m + ' menit — klik ⟳ Sync untuk memuat ulang dari spreadsheet' : 'Sinkron manual (tombol ⟳ Sync) atau saat halaman dibuka'; }
+  }
+  setInterval(tickAge, 60000);
   window.loadData = async function (manual) {
     if (!manual && editOpen() && APP_CONFIG.autoRefreshMs) { scheduleAuto(30000); return; }
     if (loading) return; loading = true;
@@ -249,7 +260,7 @@
     try {
       const d = await DataLayer.fetchAll();
       onData(d);
-      if (!onData.failed) saveCache(d);
+      if (!onData.failed) { saveCache(d); lastSyncAt = Date.now(); }
       if (manual && !onData.failed) toast('Data berhasil disinkronkan ✔');
       if (!APP_CONFIG.autoRefreshMs && !onData.failed) { const b = $('refreshBtn'); if (b) b.title = 'Sinkron manual — tidak ada sinkron otomatis. Terakhir: ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }); }
     } catch (e) {
@@ -1152,6 +1163,25 @@
     // unit berstatus Terpasang di sheet master tetapi tidak tercatat di titik manapun
     if (mKey && mStat) M.rows.forEach(r => { const k = v(r, mKey); if (k && /terpasang/i.test(v(r, mStat)) && !useEng.has(k)) { M.issues.push({ row: (r._row || r._i + 2), col: mStat, value: r[mStat], id: k, sheet: M.name, level: 'warn', _rel: true, _calc: true, reason: 'Mesin ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[mStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
     if (iKey && iStat) I.rows.forEach(r => { const k = v(r, iKey); if (k && /terpasang/i.test(v(r, iStat)) && !useIrr.has(k)) { I.issues.push({ row: (r._row || r._i + 2), col: iStat, value: r[iStat], id: k, sheet: I.name, level: 'warn', _rel: true, _calc: true, reason: 'Irrigator ' + k + ' berstatus Terpasang tetapi tidak tercatat di titik irigasi manapun (Detail Terpasang)', suggest: 'Tambahkan ke Detail Terpasang atau ubah status menjadi Standby' }); (r._flag || (r._flag = {}))[iStat] = { level: 'warn', reason: 'Tidak tercatat di Detail Terpasang', _rel: true }; } });
+    // ---- Pompa Sumur ↔ Sumber Air: setiap sumur "Ada Pompa" (PG2) harus punya catatan; catatan yang sumurnya tak lagi ber-pompa = riwayat ----
+    const PS = RAW.sumur;
+    if (PS && !PS.error && S && !S.error) {
+      clear(PS);
+      const lokH = (PS.meta && PS.meta.lokH) || 'LOKASI', have = new Set(PS.rows.map(r => String(r[lokH] || '').trim().toUpperCase()).filter(Boolean));
+      const pgOk = r => { const df = CONFIG.sumber.defaultFilters || {}; return !df.PG || !r['PG'] || df.PG.includes(String(r['PG']).trim()); };
+      const codeOf = r => lokTokens(r['Lokasi'])[0] || String(r['Lokasi'] || '').trim().toUpperCase();
+      S.rows.forEach(r => {
+        if (!/deep|sumur|bor/i.test(r['Jenis Sumber Air'] || '') || !pgOk(r)) return;
+        const pompa = String(r['Pompa'] || '').trim(), code = codeOf(r);
+        if (!pompa) { S.issues.push({ row: (r._row || r._i + 2), col: 'Pompa', value: '(kosong)', id: r['Kode Baru'], sheet: S.name, level: 'warn', _rel: true, _calc: true, reason: 'Sumur bor ' + r['Kode Baru'] + ' (' + r['Lokasi'] + ') belum diisi kolom Pompa', suggest: 'Isi Ada Pompa / Kosong / Rusak (atau lewat Pindah Pompa Sumur)' }); return; }
+        if (/ada/i.test(pompa) && code && !lokTokens(r['Lokasi']).some(c => have.has(c))) S.issues.push({ row: (r._row || r._i + 2), col: 'Pompa', value: pompa, id: r['Kode Baru'], sheet: S.name, level: 'info', _rel: true, _calc: true, reason: 'Sumur ' + r['Kode Baru'] + ' (' + r['Lokasi'] + ') ber-pompa tetapi belum ada catatan di sheet Pompa Sumur', suggest: 'Tab Sumur Bor → Sinkron dari Sumber Air' });
+      });
+      PS.rows.forEach(r => {
+        const st = r['Status Catatan'];
+        if (st === 'Lokasi tak dikenal') PS.issues.push({ row: (r._row || r._i + 2), col: lokH, value: r[lokH], id: r[lokH], sheet: PS.name, level: 'warn', _rel: true, _calc: true, reason: 'Lokasi ' + r[lokH] + ' tidak cocok dengan sumur bor manapun di Sumber Air', suggest: 'Periksa ejaan kode lokasi (mis. 114E) di sheet Pompa Sumur' });
+        else if (st === 'Pompa sudah dipindah') PS.issues.push({ row: (r._row || r._i + 2), col: lokH, value: r[lokH], id: r[lokH], sheet: PS.name, level: 'info', _rel: true, _calc: true, reason: 'Catatan ' + r[lokH] + ': pompa di sumur ini sudah ' + (r['Pompa (Sumber Air)'] || 'tidak ada') + ' menurut Sumber Air (riwayat)', suggest: 'Tab Sumur Bor → Sinkron dari Sumber Air untuk mengarsipkan' });
+      });
+    }
   }
 
   /* ---------- Peringatan kualitas data ---------- */
