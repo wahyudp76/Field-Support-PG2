@@ -91,8 +91,8 @@
     sumber: {
       title: 'Inventaris Sumber Air', icon: '🌊',
       freezeUntil: 'Wilayah',
-      // filter bawaan: hanya wilayah PG2 (W08–W15); nilai yang tidak ada di data diabaikan
-      defaultFilters: { PG: ['PG2'], Wilayah: ['W08', 'W09', 'W10', 'W11', 'W12', 'W13', 'W14', 'W15'] },
+      // filter bawaan: PG2 saja (PG1/PG3/PG4 tetap tersedia di dropdown PG — tanpa filter Wilayah bawaan agar PG lain tidak terlihat 0)
+      defaultFilters: { PG: ['PG2'] },
       filters: ['Wilayah', 'PG', 'Jenis Sumber Air', 'Sumber Air Alami/Buatan', 'Keterangan (Aktif Irigasi/Tidak)', 'Keterangan Ukur', 'Kondisi Sumur', 'Pompa', 'Status', 'Tahun'],
       kpis: [
         { label: 'Total Sumber Air', icon: '🌊', c: '#38bdf8', fn: r => r.length },
@@ -470,7 +470,7 @@
       ? [...set].forEach(v => af.push(`<span class="chip chip-blue" data-f="${esc(f)}" data-v="${esc(v)}" title="Hapus">${esc(f)}: <b>${esc(v)}</b> ✕</span>`))
       : af.push(`<span class="chip chip-blue" data-f="${esc(f)}" title="Hapus semua">${esc(f)}: <b>${set.size} nilai</b> ✕</span>`)));
     if (s.search) af.push(`<span class="chip chip-purple">🔍 "${esc(s.search)}"</span>`);
-    if (CONFIG[k].defaultFilters && af.length) af.push(`<span class="chip chip-gray" title="Filter bawaan tab ini: ${esc(Object.entries(CONFIG[k].defaultFilters).map(([f, v]) => f + ' = ' + v.join('/')).join(' · '))}. Klik ✕ pada chip untuk melihat semua PG; tombol Reset mengembalikan ke bawaan">ⓘ bawaan: PG2 · W08–W15</span>`);
+    if (CONFIG[k].defaultFilters && af.length) af.push(`<span class="chip chip-gray" title="Filter bawaan tab ini: ${esc(Object.entries(CONFIG[k].defaultFilters).map(([f, v]) => f + ' = ' + v.join('/')).join(' · '))}. Klik ✕ pada chip untuk melihat semua PG; tombol Reset mengembalikan ke bawaan">ⓘ bawaan: PG2</span>`);
     $(k + '-af').innerHTML = af.join('');
 
     requestAnimationFrame(() => cfg.charts.forEach(c => {
