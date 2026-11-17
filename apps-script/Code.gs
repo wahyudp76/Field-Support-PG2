@@ -39,7 +39,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 14, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 15, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | swap | pump) atau ?action=ping' });
 }
@@ -635,7 +635,8 @@ function out_(obj) {
 }
 
 /* REPAIR ALL — perbaiki sel yang salah format (dipanggil dari tombol "Repair all" di dashboard)
- * items: [{sheet, row, col (nama header), kind: 'date'|'num'|'formula', value}]
+ * items: [{sheet, row, col (nama header), kind: 'date'|'num'|'formula'|'status', value}]
+ *  status  → tulis teks status unit (mis. 'Terpasang') di sheet Mesin/Irrigator; sel berumus tidak ditimpa
  *  date    → tulis sebagai tanggal asli (value 'yyyy-mm-dd'); format tampilan kolom tidak diubah
  *  num     → tulis sebagai angka (value number) sehingga pemisah ribuan/desimal mengikuti locale spreadsheet
  *  formula → sel error (#REF!/#N/A/...): salin ulang rumus R1C1 dari baris terdekat di kolom yang sama yang rumusnya sehat;
@@ -684,6 +685,12 @@ function repairCells_(b) {
           var n = Number(it.value); if (!isFinite(n)) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'nilai angka tidak valid' }); return; }
           if (oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel berisi rumus, tidak ditimpa' }); return; }
           cell.setValue(n); newDesc = String(n);
+        } else if (it.kind === 'status') {
+          // status unit di sheet Mesin / Irrigator (mis. "Standby" → "Terpasang") karena unit tercatat di Detail Terpasang
+          var sv = String(it.value || 'Terpasang').trim(); if (!sv) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'nilai status kosong' }); return; }
+          if (oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel status berisi rumus, tidak ditimpa' }); return; }
+          if (String(oldV).trim().toLowerCase() === sv.toLowerCase()) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'status sudah ' + sv }); return; }
+          cell.setValue(sv); newDesc = sv;
         } else { skipped.push({ sheet: name, row: row, col: it.col, reason: 'jenis perbaikan tidak dikenal' }); return; }
         fixed.push({ sheet: name, row: row, col: it.col, kind: it.kind, from: oldV, to: newDesc });
         lg.appendRow([new Date(), b.user || '', name, row, it.col, it.kind, oldV, oldF, newDesc]);
