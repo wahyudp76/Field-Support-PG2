@@ -39,7 +39,7 @@ function doGet(e) {
     var info = {};
     try { var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID); info.spreadsheet = ss.getName(); info.sheetDetail = !!ss.getSheetByName(SHEET_DETAIL); } catch (err) { info.spreadsheetError = String(err); }
     info.pinSet = !!PropertiesService.getScriptProperties().getProperty('PIN');
-    return out_({ ok: true, app: 'FS PG2 writer', version: 15, time: new Date().toISOString(), info: info });
+    return out_({ ok: true, app: 'FS PG2 writer', version: 16, time: new Date().toISOString(), info: info });
   }
   return out_({ ok: false, error: 'Gunakan POST (action: move | withdraw | install | swap | pump) atau ?action=ping' });
 }
@@ -636,7 +636,7 @@ function out_(obj) {
 
 /* REPAIR ALL — perbaiki sel yang salah format (dipanggil dari tombol "Repair all" di dashboard)
  * items: [{sheet, row, col (nama header), kind: 'date'|'num'|'formula'|'status', value}]
- *  status  → tulis teks status unit (mis. 'Terpasang') di sheet Mesin/Irrigator; sel berumus tidak ditimpa
+ *  status  → status unit (mis. 'Terpasang') di sheet Mesin/Irrigator: jika kolom Status berumus, rumus disalin dari baris sehat terdekat (mengikuti rumus kolom); jika kolom manual, ditulis sebagai teks
  *  date    → tulis sebagai tanggal asli (value 'yyyy-mm-dd'); format tampilan kolom tidak diubah
  *  num     → tulis sebagai angka (value number) sehingga pemisah ribuan/desimal mengikuti locale spreadsheet
  *  formula → sel error (#REF!/#N/A/...): salin ulang rumus R1C1 dari baris terdekat di kolom yang sama yang rumusnya sehat;
@@ -686,11 +686,31 @@ function repairCells_(b) {
           if (oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel berisi rumus, tidak ditimpa' }); return; }
           cell.setValue(n); newDesc = String(n);
         } else if (it.kind === 'status') {
-          // status unit di sheet Mesin / Irrigator (mis. "Standby" → "Terpasang") karena unit tercatat di Detail Terpasang
+          // status unit di sheet Mesin / Irrigator (mis. "Standby" → "Terpasang") karena unit tercatat di Detail Terpasang.
+          // Bila kolom Status memakai RUMUS (di sel ini atau baris lain di kolom yang sama), ikuti rumusnya:
+          // salin rumus R1C1 dari baris terdekat yang sehat, jangan menimpa dengan teks. Teks hanya ditulis bila kolom memang berisi nilai manual.
           var sv = String(it.value || 'Terpasang').trim(); if (!sv) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'nilai status kosong' }); return; }
-          if (oldF) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'sel status berisi rumus, tidak ditimpa' }); return; }
           if (String(oldV).trim().toLowerCase() === sv.toLowerCase()) { skipped.push({ sheet: name, row: row, col: it.col, reason: 'status sudah ' + sv }); return; }
-          cell.setValue(sv); newDesc = sv;
+          var fpat = '', fcnt = 0, scan = Math.min(c.lastRow, 400);
+          for (var d2 = 1; d2 <= scan && (!fpat || d2 <= 6); d2++) {
+            [row - d2, row + d2].forEach(function (r2) {
+              if (r2 < 2 || r2 > c.lastRow) return;
+              var rg2 = c.sh.getRange(r2, col), f2 = rg2.getFormulaR1C1();
+              if (f2 && !/#REF/i.test(f2) && !isErr(rg2.getDisplayValue())) { fcnt++; if (!fpat) fpat = f2; }
+            });
+          }
+          if (oldF || fpat) {
+            var pat2 = fpat || cell.getFormulaR1C1();
+            cell.setFormulaR1C1(pat2); SpreadsheetApp.flush();
+            var nowV = c.sh.getRange(row, col).getDisplayValue();
+            newDesc = c.sh.getRange(row, col).getFormula() + ' → ' + nowV;
+            if (String(nowV).trim().toLowerCase() !== sv.toLowerCase()) {
+              // rumus sudah seragam dengan kolom, tetapi hasilnya tetap bukan "Terpasang" → sumber rujukan rumus yang perlu dicek, bukan sel ini
+              fixed.push({ sheet: name, row: row, col: it.col, kind: it.kind, from: oldV, to: newDesc, note: 'rumus disamakan dengan kolom, hasil masih "' + nowV + '" — periksa data rujukan rumus (mis. kolom lokasi/kode di sheet Detail Terpasang)' });
+              lg.appendRow([new Date(), b.user || '', name, row, it.col, it.kind + ' (rumus)', oldV, oldF, newDesc]);
+              return;
+            }
+          } else { cell.setValue(sv); newDesc = sv; }
         } else { skipped.push({ sheet: name, row: row, col: it.col, reason: 'jenis perbaikan tidak dikenal' }); return; }
         fixed.push({ sheet: name, row: row, col: it.col, kind: it.kind, from: oldV, to: newDesc });
         lg.appendRow([new Date(), b.user || '', name, row, it.col, it.kind, oldV, oldF, newDesc]);
